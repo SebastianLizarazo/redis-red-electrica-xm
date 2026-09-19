@@ -1,0 +1,33 @@
+# Docker Compose base para redis-red-electrica-xm.
+#
+# Esta Fase 0 solo levanta Redis. Los servicios publisher/subscriber/api
+# se agregan en Fases 1-2 vía `infra/Dockerfile.*` separados.
+# El nombre de la red es fijo (`red-electrica-net`) para que los
+# contenedores posteriores se conecten con `redis:6379` como hostname.
+
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis-red-electrica
+    ports:
+      - "6379:6379"
+    healthcheck:
+      # `redis-cli ping` retorna "PONG" si está sano. 5 reintentos con
+      # 3s de timeout cada uno = 15s para detectar Redis caído.
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  default:
+    name: red-electrica-net
