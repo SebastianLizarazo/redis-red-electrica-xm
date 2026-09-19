@@ -1,0 +1,15 @@
+{
+  "name": "redis-red-electrica-xm-root",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monitor de red eléctrica colombiana en tiempo real con Redis",
+  "packageManager": "pnpm@11.25.0",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "dev:dashboard": "pnpm --filter dashboard dev",
+    "build:dashboard": "pnpm --filter dashboard build",
+    "preview:dashboard": "pnpm --filter dashboard preview"
+  }
+}

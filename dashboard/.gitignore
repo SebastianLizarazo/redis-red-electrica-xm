@@ -1,0 +1,12 @@
+# Frontend dashboard — generado por Vite y/o instalado por pnpm.
+# Existe como archivo separado para no tocar el .gitignore raíz.
+node_modules/
+dist/
+.vite/
+*.local
+
+# Logs de build/dev
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
