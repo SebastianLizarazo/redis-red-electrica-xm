@@ -47,37 +47,37 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 > **Refs técnicas útiles**: [`docs/README_TECNICO.md` §6.1 Modelos Pydantic](docs/README_TECNICO.md#61-modelos-pydantic-commonmodelspy), [§6.2 Keys Redis](docs/README_TECNICO.md#62-keys-redis-commonredis_keyspy), [§6.3 Protocol DataSource](docs/README_TECNICO.md#63-protocol-datasource-commondata_sourcepy)
 
-- [ ] **T-PUB-001** — Implementar `publisher/xm_client.py`
+- [x] **T-PUB-001** — Implementar `publisher/xm_client.py`
   - Cliente HTTP async (`httpx`) contra `DemandaTiempoReal`
   - Manejo de timeout (10s configurable), 3 reintentos con backoff exponencial
   - Conversión de excepciones a `DataSourceError` / `DataSourceTimeoutError`
   - Ref de errores: §6.3 del README técnico (excepciones específicas)
 
-- [ ] **T-PUB-002** — Implementar `publisher/simulator.py`
+- [x] **T-PUB-002** — Implementar `publisher/simulator.py`
   - Genera eventos sintéticos realistas con patrones circadianos (valle 3-5am, pico 19h)
   - 4 eventos anómalos inyectables: `demand_surge`, `hydro_drop`, `critical_deficit`, `recovery`
   - Endpoint REST para inyectarlos (referencia: `stress_key` en §6.2)
   - Publica eventos de las 5 zonas (ANT/VAL/ATL/BOG/SAN) + global SIN
 
-- [ ] **T-PUB-003** — Implementar `publisher/normalizer.py`
+- [x] **T-PUB-003** — Implementar `publisher/normalizer.py`
   - Transforma respuesta cruda de XM o simulador al formato `Event` definido en §6.1
   - Validación con Pydantic, descarte de valores fuera de rango
   - Mism formato para XM y simulador (publisher agnóstico de fuente)
 
-- [ ] **T-PUB-004** — Implementar `publisher/source_selector.py`
+- [x] **T-PUB-004** — Implementar `publisher/source_selector.py`
   - Implementa Protocol `DataSource` (§6.3) con selector entre XM y simulador
   - Lógica de fallback: 3 fallos consecutivos → switch automático a simulador
   - Backoff de reintento: 5 → 10 → 20 → 30 min (ver §6.2 tabla TTLs)
   - Escribe `health:mode` y `health:failures` en Redis
 
-- [ ] **T-PUB-005** — Implementar `publisher/main.py`
+- [x] **T-PUB-005** — Implementar `publisher/main.py`
   - Orquestador async: decide fuente → fetch → normaliza → PUBLISH a `energy-events` (Pub/Sub) + XADD a `energy:stream` (Stream con MAXLEN 1000)
   - XADDs `state:zone:<id>` (Hash) por cada evento
   - Loop con intervalo configurable (5s simulador, 300s real)
 
-- [ ] **T-PUB-006** — Tests unitarios de `normalizer.py` (TDD estándar)
-- [ ] **T-PUB-007** — Tests de `xm_client.py` con `respx` mockeando API XM
-- [ ] **T-PUB-008** — Tests de `source_selector.py` (3 fallos → switch)
+- [x] **T-PUB-006** — Tests unitarios de `normalizer.py` (TDD estándar)
+- [x] **T-PUB-007** — Tests de `xm_client.py` con `respx` mockeando API XM
+- [x] **T-PUB-008** — Tests de `source_selector.py` (3 fallos → switch)
 
 ---
 
