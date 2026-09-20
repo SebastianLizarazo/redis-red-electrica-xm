@@ -140,7 +140,20 @@ class Metric(BaseModel):
 
 
 class Alert(BaseModel):
-    """Alerta operacional, generada por el subscriber."""
+    """Alerta operacional, generada por el subscriber.
+
+    Campos nuevos (PR-A de `subscriber-core-2026-09`):
+    - `state`: `Literal["active", "cleared"]` para distinguir el ciclo de vida.
+    - `consecutive_cycles`: contador de ciclos consecutivos en breach (debounce).
+    - `code`: discriminator que coincide con el `code` del wire format del Pub/Sub
+      (REQ-SUB-ALERTS-001). Por back-compat, `code == rule` cuando ambos
+      están presentes; los consumidores existentes que leían `rule` siguen
+      funcionando mientras `code` queda vacío por default.
+
+    Los nuevos campos tienen default, por lo que `frozen=True` se preserva:
+    instancias ya creadas no pueden mutar, pero constructores sin los nuevos
+    campos siguen funcionando (test fixtures existentes siguen verdes).
+    """
 
     model_config = ConfigDict(frozen=True)
 
@@ -152,6 +165,10 @@ class Alert(BaseModel):
     threshold: float
     timestamp: AwareDatetime
     message: str = Field(..., min_length=1, max_length=512)
+    # --- Nuevos campos con default (back-compat, frozen=True preservado) ---
+    code: str = Field(default="", max_length=64)
+    state: Literal["active", "cleared"] = "active"
+    consecutive_cycles: int = Field(default=0, ge=0)
 
 
 class HealthStatus(BaseModel):
