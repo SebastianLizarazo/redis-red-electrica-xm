@@ -23,7 +23,8 @@ keywords = ["redis", "fastapi", "real-time", "energy", "colombia", "xm"]
 dependencies = [
     "fastapi>=0.115,<1.0",
     "uvicorn[standard]>=0.30,<1.0",
-    "redis>=5.0,<5.1",
+    # Pinned <9 porque fakeredis>=2.20 requires redis>=8.0; API estable a través de 5.x→8.x
+    "redis>=5.0,<9",
     "pydantic>=2.0,<3.0",
     "pydantic-settings>=2.0,<3.0",
     "httpx>=0.27,<1.0",
