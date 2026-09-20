@@ -137,12 +137,34 @@ class Publisher:
             )
 
     async def _publicar(self, evento: Event) -> None:
-        """Escribe un evento en los tres destinos, en un solo round-trip."""
+        """Escribe un evento en los tres destinos en una sola MULTI/EXEC.
+
+        Single-slot constraint: PUBLISH/SUBSCRIBE es global (no consume slot),
+        pero XADD sobre `energy:stream` y HSET/EXPIRE sobre
+        `state:zone:{ANT,VAL,ATL,BOG,SAN}` o `state:sin` sí. En Redis
+        single-instance (lo que corre `make up` localmente) no hay slots
+        y `transaction=True` no impone ninguna restricción. Si en el futuro
+        se migra a Redis Cluster, las 4 keys deben caer en el MISMO slot;
+        una opción es hashtag routing (`{tag}`) en `state:zone:{ANT}` ->
+        `state:zone:{prefijo}:ANT` para forzar el hash común. Si las keys
+        caen en slots distintos, MULTI/EXEC lanza `ClusterCrossSlotError`
+        y el ciclo cae al aislamiento por evento (R4-001): se loguea el
+        `entity_id`, se incrementa `_event_failures`, y se continúa con el
+        siguiente evento sin abortar la corrida.
+
+        Validar localmente antes de promover el cambio:
+            make up
+            redis-cli -p 6379 cluster info   # cluster_enabled:0 (single-instance)
+
+        Atomicity contract: bajo `transaction=True`, cualquier
+        `ConnectionError`/`RedisError` en `pipe.execute()` hace rollback de
+        los 4 comandos encolados — un commit parcial es IMPOSIBLE.
+        """
         payload = evento.model_dump(mode="json")
         mensaje = json.dumps({"type": "tick", **payload}, ensure_ascii=False)
         plano = _aplanar(evento)
 
-        pipe = self._redis.pipeline(transaction=False)
+        pipe = self._redis.pipeline(transaction=True)
         pipe.publish(PUBSUB_CHANNEL_ENERGY, mensaje)
         pipe.xadd(STREAM_ENERGY, plano, maxlen=STREAM_ENERGY_MAXLEN, approximate=True)
 
