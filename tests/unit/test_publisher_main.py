@@ -7,7 +7,8 @@ Cubre el contrato de las 5 REQs del spec obs #478:
                 (test_002, test_003, test_004).
 - REQ-PHB-003 : aislamiento por evento (test_006).
 - REQ-PHB-004 : atomicidad del pipeline `transaction=True` (test_007).
-- REQ-PHB-005 : source-switch publica sin tocar streams ni hashes (test_005).
+- REQ-PHB-005 : source-switch publica sin tocar streams ni hashes (test_005)
+                Y raise en source-switch NO aborta el ciclo (test_008, V-001).
 
 Fixtures reutilizados de `tests/conftest.py` (pin RISK-N2; los números
 de línea reflejan el estado del conftest al cierre de PR-A, ya merged):
@@ -22,7 +23,8 @@ primero: si PR-A hubiera mutado la semántica de `_aplanar`, este test
 falla primero y expone el cambio antes de que los behavior tests
 pasen contra suposiciones equivocadas.
 
-Total: 7 funciones (lockdown RISK-4: ni una más, ni una menos). Las
+Total: 8 funciones (PR-B agregó 7 con lockdown RISK-4; PR-C agrega test_008
+para cerrar V-001 CRITICAL del verify-report sin reabrir la lockdown). Las
 variantes de `test_001_redacta_url_con_password` se generan vía
 `pytest.mark.parametrize`; pytest cuenta cada caso como item separado.
 """
@@ -30,6 +32,7 @@ variantes de `test_001_redacta_url_con_password` se generan vía
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import pytest
@@ -436,3 +439,90 @@ async def test_007_pipeline_atomico_o_nada(
     #    - el stream energy:stream está vacío.
     assert await fakeredis_async_client.exists(KEY_STATE_SIN) == 0
     assert await fakeredis_async_client.xlen(STREAM_ENERGY) == 0
+
+
+# ======================================================================
+# Test 008 — Source-switch raise NO aborta el ciclo (REQ-PHB-005/S1).
+# Cierra V-001 CRITICAL del verify-report #486 de publisher-hardening-2026-09.
+# ======================================================================
+
+
+async def test_008_source_switch_raise_isolation(
+    caplog,
+    monkeypatch,
+    fakeredis_async_client,
+    event_sample: Event,
+    zone_event_sample: Event,
+) -> None:
+    """REQ-PHB-005/S1 (cierra V-001 CRITICAL del verify-report #486):
+    si `_publicar_source_switch` levanta dentro del `_ciclo`, el bucle
+    de eventos que viene justo después debe seguir publicando TODOS los
+    eventos pendientes, el contador `_source_switch_failures` debe
+    terminar en 1, y la falla debe quedar logueada con el string del
+    error.
+
+    Antes de este test el contrato AC7 estaba cubierto solo por source
+    inspection (verify-report #486 V-001 CRITICAL); ahora está
+    verificado en runtime con un ``ConnectionError`` inyectado en
+    ``_publicar_source_switch``. La línea 99-110 de ``publisher/main.py``
+    sigue siendo la implementación bajo prueba; este test NO la toca.
+    """
+    publisher = Publisher(
+        redis_client=fakeredis_async_client,
+        selector=_StubSelector(
+            [event_sample, zone_event_sample, event_sample],
+            switch_notice=DataSource.SIM,
+        ),
+    )
+
+    switch_calls: list[DataSource] = []
+    publicar_calls: list[str] = []
+
+    async def stub_publicar_source_switch(modo: DataSource) -> None:
+        switch_calls.append(modo)
+        # Simulamos la caída de Redis justo en el momento del switch.
+        raise ConnectionError("simulated source-switch redis failure")
+
+    async def stub_publicar(evento: Event) -> None:
+        # Solo nos importa el entity_id para el assert final (los
+        # objetos Event no son hashable entre sí de forma confiable).
+        publicar_calls.append(evento.entity_id)
+
+    monkeypatch.setattr(publisher, "_publicar_source_switch", stub_publicar_source_switch)
+    monkeypatch.setattr(publisher, "_publicar", stub_publicar)
+
+    # Capturamos WARNING+ del logger `publisher`. `logger.exception()` emite
+    # a ERROR (levelno=40), que también califica como >= WARNING.
+    caplog.set_level(logging.WARNING, logger="publisher")
+
+    # El ciclo NO debe levantar: el try/except del source-switch lo absorbe.
+    await publisher._ciclo()
+
+    # 1) El counter de source-switch failures quedó exactamente en 1.
+    assert publisher._source_switch_failures == 1
+
+    # 2) A pesar del fallo, el bucle de eventos publicó los 3 eventos
+    #    pendientes. El ciclo NO fue abortado por el raise del switch.
+    assert publicar_calls == ["SIN", "ANT", "SIN"]
+    assert len(switch_calls) == 1
+    assert switch_calls[0] == DataSource.SIM
+
+    # 3) La falla quedó logueada con el mensaje canónico y el error
+    #    string inyectado. Verificamos contra `record.getMessage()` (que
+    #    devuelve solo la string del `msg`, sin traceback) y contra el
+    #    extra `error` que el código de producción pasa explícitamente
+    #    (`extra={"error": str(exc)}` en publisher/main.py:109).
+    records = [
+        r for r in caplog.records if r.getMessage() == "source_switch publish failed"
+    ]
+    assert len(records) == 1, (
+        f"expected exactly 1 'source_switch publish failed' log; got "
+        f"{len(records)}: {[r.getMessage() for r in caplog.records]}"
+    )
+    record = records[0]
+    # `logger.exception()` emite a ERROR (40); WARNING es 30 — el contrato
+    # AC7 exige que el evento se logue con severidad de warning o mayor.
+    assert record.levelno >= logging.WARNING
+    # El extra `error` debe contener el string del ConnectionError.
+    assert "simulated source-switch redis failure" in getattr(record, "error", "")
+
