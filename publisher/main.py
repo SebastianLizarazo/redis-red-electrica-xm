@@ -31,6 +31,7 @@ import json
 import signal
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 import redis.asyncio as aioredis
 
@@ -182,10 +183,50 @@ def _ahora_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _safe_redis_url(raw: str) -> str:
+    """Strip embedded credentials from a Redis URL for log diagnostics.
+
+    Inputs
+    ------
+    raw : str
+        The original Redis URL, possibly carrying ``user:password@host:port/db``.
+
+    The helper preserves scheme, host (including IPv6 brackets), port and path,
+    and discards any userinfo. It is intentionally narrow: it does NOT validate
+    that the URL is well-formed, only that no credential leaks into log output.
+
+    Examples
+    --------
+    >>> _safe_redis_url("redis://u:p@h:6379/0")
+    'redis://h:6379/0'
+    >>> _safe_redis_url("redis://[::1]:6379/0")
+    'redis://[::1]:6379/0'
+    >>> _safe_redis_url("redis://localhost")
+    'redis://localhost'
+    """
+    parsed = urlparse(raw)
+    # Strip userinfo (everything before the last '@') only when present.
+    if "@" in (parsed.netloc or ""):
+        _, _, hostport = parsed.netloc.rpartition("@")
+        netloc = hostport
+    else:
+        netloc = parsed.netloc or ""
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
+# Byte-identical guarantee for non-credentialed URLs: applying the helper to a
+# URL that has no userinfo must be a no-op. If this ever fires, REQ-PHB-001
+# regression has landed and every log line that includes `settings.redis_url`
+# will start drifting again.
+assert _safe_redis_url("redis://h:6379") == "redis://h:6379", (
+    "_safe_redis_url must preserve URLs without userinfo (REQ-PHB-001)"
+)
+
+
 async def _build_publisher() -> Publisher:
     redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
     await redis_client.ping()
-    logger.info("conectado a Redis", extra={"url": settings.redis_url})
+    logger.info("conectado a Redis", extra={"url": _safe_redis_url(settings.redis_url)})
 
     selector = SourceSelector(
         real=XMRealSource(),
@@ -203,7 +244,7 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001 - sin Redis no hay nada que hacer
         logger.error(
             "no se pudo conectar a Redis; ¿corriste `make up`?",
-            extra={"url": settings.redis_url, "error": str(exc)},
+            extra={"url": _safe_redis_url(settings.redis_url), "error": str(exc)},
         )
         raise SystemExit(1) from exc
 
