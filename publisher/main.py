@@ -31,6 +31,7 @@ import json
 import signal
 from datetime import UTC, datetime
 from typing import Any
+from urllib.parse import urlparse, urlunparse
 
 import redis.asyncio as aioredis
 
@@ -62,6 +63,11 @@ class Publisher:
         self._stop = asyncio.Event()
         self._ciclos = 0
         self._eventos_publicados = 0
+        # R4-001 / R4-003 counters: cuántas publicaciones fallaron desde el
+        # arranque, separadas por origen. Sirven para diagnóstico y para que
+        # el dashboard pueda mostrar degrado si las tasas suben.
+        self._event_failures = 0
+        self._source_switch_failures = 0
 
     async def run(self) -> None:
         """Bucle principal. Sale limpio cuando llega SIGINT/SIGTERM."""
@@ -92,10 +98,29 @@ class Publisher:
 
         conmutacion = self._selector.take_switch_notice()
         if conmutacion is not None:
-            await self._publicar_source_switch(conmutacion)
+            try:
+                await self._publicar_source_switch(conmutacion)
+            except Exception as exc:  # noqa: BLE001 - un switch malo no mata el ciclo
+                # R4-003: un hipo de Redis en el momento del switch NO debe
+                # saltarse el bucle de eventos que viene justo después.
+                self._source_switch_failures += 1
+                logger.exception(
+                    "source_switch publish failed",
+                    extra={"error": str(exc)},
+                )
 
         for evento in eventos:
-            await self._publicar(evento)
+            try:
+                await self._publicar(evento)
+            except Exception as exc:  # noqa: BLE001 - un evento malo no mata el ciclo
+                # R4-001: aísla cada `_publicar` del siguiente. Una excepción
+                # en un evento no debe propagarse y abortar el resto del lote.
+                self._event_failures += 1
+                logger.exception(
+                    "event publish failed",
+                    extra={"entity_id": evento.entity_id, "error": str(exc)},
+                )
+                continue
 
         self._ciclos += 1
         sin = next((e for e in eventos if e.entity_id == "SIN"), None)
@@ -112,12 +137,34 @@ class Publisher:
             )
 
     async def _publicar(self, evento: Event) -> None:
-        """Escribe un evento en los tres destinos, en un solo round-trip."""
+        """Escribe un evento en los tres destinos en una sola MULTI/EXEC.
+
+        Single-slot constraint: PUBLISH/SUBSCRIBE es global (no consume slot),
+        pero XADD sobre `energy:stream` y HSET/EXPIRE sobre
+        `state:zone:{ANT,VAL,ATL,BOG,SAN}` o `state:sin` sí. En Redis
+        single-instance (lo que corre `make up` localmente) no hay slots
+        y `transaction=True` no impone ninguna restricción. Si en el futuro
+        se migra a Redis Cluster, las 4 keys deben caer en el MISMO slot;
+        una opción es hashtag routing (`{tag}`) en `state:zone:{ANT}` ->
+        `state:zone:{prefijo}:ANT` para forzar el hash común. Si las keys
+        caen en slots distintos, MULTI/EXEC lanza `ClusterCrossSlotError`
+        y el ciclo cae al aislamiento por evento (R4-001): se loguea el
+        `entity_id`, se incrementa `_event_failures`, y se continúa con el
+        siguiente evento sin abortar la corrida.
+
+        Validar localmente antes de promover el cambio:
+            make up
+            redis-cli -p 6379 cluster info   # cluster_enabled:0 (single-instance)
+
+        Atomicity contract: bajo `transaction=True`, cualquier
+        `ConnectionError`/`RedisError` en `pipe.execute()` hace rollback de
+        los 4 comandos encolados — un commit parcial es IMPOSIBLE.
+        """
         payload = evento.model_dump(mode="json")
         mensaje = json.dumps({"type": "tick", **payload}, ensure_ascii=False)
         plano = _aplanar(evento)
 
-        pipe = self._redis.pipeline(transaction=False)
+        pipe = self._redis.pipeline(transaction=True)
         pipe.publish(PUBSUB_CHANNEL_ENERGY, mensaje)
         pipe.xadd(STREAM_ENERGY, plano, maxlen=STREAM_ENERGY_MAXLEN, approximate=True)
 
@@ -182,10 +229,50 @@ def _ahora_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def _safe_redis_url(raw: str) -> str:
+    """Strip embedded credentials from a Redis URL for log diagnostics.
+
+    Inputs
+    ------
+    raw : str
+        The original Redis URL, possibly carrying ``user:password@host:port/db``.
+
+    The helper preserves scheme, host (including IPv6 brackets), port and path,
+    and discards any userinfo. It is intentionally narrow: it does NOT validate
+    that the URL is well-formed, only that no credential leaks into log output.
+
+    Examples
+    --------
+    >>> _safe_redis_url("redis://u:p@h:6379/0")
+    'redis://h:6379/0'
+    >>> _safe_redis_url("redis://[::1]:6379/0")
+    'redis://[::1]:6379/0'
+    >>> _safe_redis_url("redis://localhost")
+    'redis://localhost'
+    """
+    parsed = urlparse(raw)
+    # Strip userinfo (everything before the last '@') only when present.
+    if "@" in (parsed.netloc or ""):
+        _, _, hostport = parsed.netloc.rpartition("@")
+        netloc = hostport
+    else:
+        netloc = parsed.netloc or ""
+    return urlunparse(parsed._replace(netloc=netloc))
+
+
+# Byte-identical guarantee for non-credentialed URLs: applying the helper to a
+# URL that has no userinfo must be a no-op. If this ever fires, REQ-PHB-001
+# regression has landed and every log line that includes `settings.redis_url`
+# will start drifting again.
+assert _safe_redis_url("redis://h:6379") == "redis://h:6379", (
+    "_safe_redis_url must preserve URLs without userinfo (REQ-PHB-001)"
+)
+
+
 async def _build_publisher() -> Publisher:
     redis_client = aioredis.from_url(settings.redis_url, decode_responses=True)
     await redis_client.ping()
-    logger.info("conectado a Redis", extra={"url": settings.redis_url})
+    logger.info("conectado a Redis", extra={"url": _safe_redis_url(settings.redis_url)})
 
     selector = SourceSelector(
         real=XMRealSource(),
@@ -203,7 +290,7 @@ async def main() -> None:
     except Exception as exc:  # noqa: BLE001 - sin Redis no hay nada que hacer
         logger.error(
             "no se pudo conectar a Redis; ¿corriste `make up`?",
-            extra={"url": settings.redis_url, "error": str(exc)},
+            extra={"url": _safe_redis_url(settings.redis_url), "error": str(exc)},
         )
         raise SystemExit(1) from exc
 
