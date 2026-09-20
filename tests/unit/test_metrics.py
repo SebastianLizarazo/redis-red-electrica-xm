@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+import pytest
+
 from common.models import DataSource, Event, EventData, Location, ZoneId
 from subscriber.metrics import compute_metrics, persist_metrics  # noqa: F401  (FAIL pre-impl)
 
