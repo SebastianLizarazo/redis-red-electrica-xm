@@ -275,7 +275,7 @@ Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review line
 - [ ] **T-DEMO-002** — Preparar guion de la demo (5-7 min)
   - 1) Mostrar publisher corriendo (logs)
   - 2) Generar evento manual / forzar XM
-  - 3) Mostrar evento en Redis (`make redis-cli` + KEYS)
+  -   3) Mostrar evento en Redis (`docker exec redis-red-electrica redis-cli KEYS "*"`)
   - 4) Mostrar el dashboard actualizándose sin recargar
   - 5) Forzar alerta con stress test
   - 6) Mostrar fallback (banner cambia a "SIMULADOR")
@@ -365,4 +365,4 @@ Antes de entregar, validar:
 
 ---
 
-**Owner del roadmap**: Sebastián · **Próxima actualización**: al cierre del Día 2
+**Owner del roadmap**: Sebastián · **Próxima actualización**: cierre de Día 3
