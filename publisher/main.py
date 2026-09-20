@@ -63,6 +63,11 @@ class Publisher:
         self._stop = asyncio.Event()
         self._ciclos = 0
         self._eventos_publicados = 0
+        # R4-001 / R4-003 counters: cuántas publicaciones fallaron desde el
+        # arranque, separadas por origen. Sirven para diagnóstico y para que
+        # el dashboard pueda mostrar degrado si las tasas suben.
+        self._event_failures = 0
+        self._source_switch_failures = 0
 
     async def run(self) -> None:
         """Bucle principal. Sale limpio cuando llega SIGINT/SIGTERM."""
@@ -93,10 +98,29 @@ class Publisher:
 
         conmutacion = self._selector.take_switch_notice()
         if conmutacion is not None:
-            await self._publicar_source_switch(conmutacion)
+            try:
+                await self._publicar_source_switch(conmutacion)
+            except Exception as exc:  # noqa: BLE001 - un switch malo no mata el ciclo
+                # R4-003: un hipo de Redis en el momento del switch NO debe
+                # saltarse el bucle de eventos que viene justo después.
+                self._source_switch_failures += 1
+                logger.exception(
+                    "source_switch publish failed",
+                    extra={"error": str(exc)},
+                )
 
         for evento in eventos:
-            await self._publicar(evento)
+            try:
+                await self._publicar(evento)
+            except Exception as exc:  # noqa: BLE001 - un evento malo no mata el ciclo
+                # R4-001: aísla cada `_publicar` del siguiente. Una excepción
+                # en un evento no debe propagarse y abortar el resto del lote.
+                self._event_failures += 1
+                logger.exception(
+                    "event publish failed",
+                    extra={"entity_id": evento.entity_id, "error": str(exc)},
+                )
+                continue
 
         self._ciclos += 1
         sin = next((e for e in eventos if e.entity_id == "SIN"), None)
