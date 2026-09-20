@@ -9,7 +9,7 @@
 | Día | Fecha | Estado | Foco |
 |-----|-------|--------|------|
 | Día 1 | Sábado 19 | ✅ cerrado | Scaffolding |
-| Día 2 | Domingo 20 | ⬜ | Publisher + Subscriber + Redis (conexión) |
+| Día 2 | Domingo 20 | 🟡 parcial | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber/API/Dashboard/Infra en progreso |
 | Día 3 | Lunes 21 | ⬜ | API + Frontend (conexión) |
 | Día 4 | Martes 22 | ⬜ | Integración end-to-end + docs + demo |
 
@@ -205,6 +205,21 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 > **Refs técnicas útiles**: [`docs/README_TECNICO.md`](docs/README_TECNICO.md) completo (sección §7 mapeo a rúbrica es la guía para el documento técnico final)
 
+### Bloque Bounded Correction Publisher (Día 2)
+
+Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review lineage `review-25673e155a477d86` resueltos y runtime-verificados. 3 PRs chained stacked-to-main (#3 PR-A código, #4 PR-B tests + deps fix, #5 PR-C test_008 cerrando V-001).
+
+- [x] **T-PHB-001** — `_safe_redis_url` helper con `urllib.parse.urlparse` (R1-001: redact embedded credentials from logged Redis URL)
+- [x] **T-PHB-002** — Reemplazar los 2 call sites de log con `_safe_redis_url(settings.redis_url)` (R1-001)
+- [x] **T-PHB-003** — `tests/unit/test_log_redaction.py` con casos parametrizados (password, IPv6, missing port, no-credentials passthrough) — 6 tests
+- [x] **T-PHB-004** — per-event try/except con `_event_failures` counter (R4-001: per-event Redis failure ya no aborta el ciclo)
+- [x] **T-PHB-005** — source-switch try/except con `_source_switch_failures` counter (R4-005: source-switch failure aislado)
+- [x] **T-PHB-006** — `pipeline(transaction=True)` + docstring single-slot constraint (R4-002: atomicidad MULTI/EXEC, mata el "zona zombie")
+- [x] **T-PHB-007** — `tests/unit/test_publisher_main.py` con 7 tests mandatory (R3-001: cubre el shape Pub/Sub, branch `state:sin`, discriminator `type:tick`, per-event isolation, atomicidad)
+- [x] **T-PHB-008** — `test_008_source_switch_raise_isolation` cubre AC7 del verify report (cierra V-001 CRITICAL surgido en primer verify pass)
+
+**Resultado**: 86/86 tests verde, 5/5 CRITICAL resueltos, publisher hardened y listo para que Alejandro construya el subscriber encima. Artefactos SDD en Engram: `sdd/publisher-hardening-2026-09/{proposal,spec,design,tasks,apply-progress,verify-report,archive-report}`.
+
 ### Bloque Integración (Días 2-4)
 
 - [ ] **T-INT-006** — Smoke test end-to-end local
@@ -265,6 +280,34 @@ DÍA 4 (martes 22) ──► integración final + entrega
   - 5) Forzar alerta con stress test
   - 6) Mostrar fallback (banner cambia a "SIMULADOR")
   - 7) Cerrar con Q&A preparado
+
+---
+
+## Follow-ups diferidos (no bloquean Día 2; revisar antes de Día 4)
+
+Documentados en `engram:sdd/publisher-hardening-2026-09/archive-report` (obs #488) y `engram:sdd/publisher-hardening-2026-09/verify-report` (obs #486). NO bloquean la integración con Alejandro/David/Jonathan pero conviene cerrarlos antes de la entrega.
+
+### De la bounded correction (V-NNN del verify)
+- **V-002 WARNING** — multi-failure counter (extender `test_006` con variant de 2 fallas; spec S2 lo pide)
+- **V-003 SUGGESTION** — `_safe_redis_url` placement debajo de `class Publisher` (drift del design §4)
+- **V-004 SUGGESTION** — typo R4-005 vs R4-003 cross-artifacts (resenar el identificador canónico)
+
+### WARNING originales del 4R bounded review (lineage `review-25673e155a477d86`)
+- **R3-002** — `force_source=real` no persiste salud cuando XM falla (banner del dashboard queda stale)
+- **R3-003** — `consecutive_failures` crece sin tope en modo SIM (engañoso para el operador tras 1h de XM caído)
+- **R4-004** — shutdown latency hasta 5 min en REAL mode (amplifica R4-002 bajo SIGKILL)
+- **R4-005** — XM retry backoff sin jitter (thundering-herd si hay 2 réplicas)
+- **R4-006** — REAL-mode wait de 5 min retrasa detección de fallos XM
+- **R4-007** — HSET + EXPIRE no atómico (subsume R4-002, fixable con Lua EVAL)
+- **R4-008** — SIGTERM no se maneja en Windows (`add_signal_handler` raises `NotImplementedError`)
+
+### Pre-existentes Fase 0 (no introducidos por esta bounded correction)
+- `pyproject.toml [tool.mypy]` declara `discover_untyped_supports` (opción inválida)
+- `common/logging_config.py` imprime la hora con doble Z (`%(asctime)sZ` + `formatTime` retorna `+ "Z"`)
+- `common/config.py:125` falla mypy
+
+### Documentación
+- **T-DOC-001** — Disclaimer "es un modelo, no un dato medido" YA está en `publisher/normalizer.py` docstring; falta elevarlo al `docs/README_TECNICO.md` para que el profesor lo vea
 
 ---
 
