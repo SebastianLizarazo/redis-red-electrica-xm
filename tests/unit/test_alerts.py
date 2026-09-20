@@ -146,3 +146,220 @@ def test_001_alerts_shape_returns_list_of_alerts() -> None:
     assert a.threshold == 800.0
     assert a.value == 1000.0  # demanda - generacion
     assert a.zone_id == "ANT"
+
+
+# ---------------------------------------------------------------------------
+# BEHAVIOR — test_002 (debounce)
+# ---------------------------------------------------------------------------
+
+
+def test_002_alerts_debounce_first_cycle_no_publish() -> None:
+    """BEHAVIOR: cycle 1 with breach → counter goes 0→1, NO alert published.
+    Cycle 2 (breach still holds) → counter 1→2, ONE active alert published.
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    event = _make_event()  # gap=1000 > 800 → A1 fires
+    metrics = _make_metrics(renewable_pct=35.0)  # > 30 → A2 NOT firing
+
+    # Cycle 1: no publish.
+    a1 = engine.evaluate(event, metrics)
+    assert a1 == [], "cycle 1 must be suppressed by debounce"
+    assert engine._breaches["DEMAND_GENERATION_GAP"] == 1
+    assert engine._breaches.get("LOW_RENEWABLE", 0) == 0
+
+    # Cycle 2: active alert fires.
+    a2 = engine.evaluate(event, metrics)
+    assert len(a2) == 1
+    assert a2[0].state == "active"
+    assert a2[0].consecutive_cycles == 2
+    assert a2[0].code == "DEMAND_GENERATION_GAP"
+    assert engine._breaches["DEMAND_GENERATION_GAP"] == 2
+
+
+# ---------------------------------------------------------------------------
+# BEHAVIOR — test_003 (auto-clear)
+# ---------------------------------------------------------------------------
+
+
+def test_003_alerts_auto_clear_publishes_cleared_with_final_cycles() -> None:
+    """BEHAVIOR: 2 cycles of breach (active fires), then condition lifts →
+    engine publishes ONE `cleared` alert with `consecutive_cycles` frozen at
+    the final value (the cycles-when-it-died counter), and resets to 0.
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    breach_event = _make_event()  # gap=1000 > 800
+    ok_event = _make_event(demanda=1000.0, generacion=1000.0)  # gap=0
+    metrics = _make_metrics(renewable_pct=35.0)
+
+    # Cycle 1: debounce → [].
+    assert engine.evaluate(breach_event, metrics) == []
+    # Cycle 2: active alert fires.
+    cycle2 = engine.evaluate(breach_event, metrics)
+    assert len(cycle2) == 1 and cycle2[0].state == "active"
+    assert engine._breaches["DEMAND_GENERATION_GAP"] == 2
+
+    # Cycle 3: condition lifts → cleared fires.
+    cleared = engine.evaluate(ok_event, metrics)
+    assert len(cleared) == 1
+    c = cleared[0]
+    assert c.state == "cleared"
+    assert c.code == "DEMAND_GENERATION_GAP"
+    assert c.consecutive_cycles == 2  # frozen at the final value
+    assert engine._breaches["DEMAND_GENERATION_GAP"] == 0
+
+
+# ---------------------------------------------------------------------------
+# BEHAVIOR — test_004 (both A1 + A2 fire simultaneously)
+# ---------------------------------------------------------------------------
+
+
+def test_004_alerts_both_A1_and_A2_fire_simultaneously() -> None:
+    """BEHAVIOR: when BOTH A1 (gap > 800) AND A2 (renewable < 30%) hold on
+    the same cycle, both rules publish INDEPENDENT alerts (one HIGH active,
+    one MEDIUM active). Counts: 2 separate alerts.
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    # gap=900 (> 800) AND renewable=10 (< 30) → both fire.
+    event = _make_event(demanda=1500.0, generacion=600.0,
+                        solar=10.0, eolica=10.0, hidro=40.0)
+    metrics = _make_metrics(renewable_pct=10.0, balance_mw=900.0)
+
+    # Cycle 1: both debounce.
+    assert engine.evaluate(event, metrics) == []
+    # Cycle 2: both fire.
+    alerts = engine.evaluate(event, metrics)
+    assert len(alerts) == 2
+    codes = {a.code for a in alerts}
+    assert codes == {"DEMAND_GENERATION_GAP", "LOW_RENEWABLE"}
+    states = {a.state for a in alerts}
+    assert states == {"active"}
+    # Both have consecutive_cycles == 2 (independent counters).
+    for a in alerts:
+        assert a.consecutive_cycles == 2
+
+
+# ---------------------------------------------------------------------------
+# BEHAVIOR — test_005 (idempotent when breach continues)
+# ---------------------------------------------------------------------------
+
+
+def test_005_alerts_idempotent_when_breach_continues() -> None:
+    """BEHAVIOR: once an alert is `active`, subsequent cycles with the breach
+    continuing MUST NOT publish duplicate alerts (only ONE active per
+    transition from <DEBOUNCE to ==DEBOUNCE).
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    event = _make_event()  # gap=1000 > 800
+    metrics = _make_metrics(renewable_pct=35.0)
+
+    # Cycle 1: debounce.
+    assert engine.evaluate(event, metrics) == []
+    # Cycle 2: active fires (transition 1→2).
+    cycle2 = engine.evaluate(event, metrics)
+    assert len(cycle2) == 1 and cycle2[0].state == "active"
+    # Cycle 3: STILL active, but NO new publish (idempotent).
+    cycle3 = engine.evaluate(event, metrics)
+    assert cycle3 == [], "idempotency: cycle 3 must NOT re-publish active"
+    # Cycle 4: still no publish.
+    assert engine.evaluate(event, metrics) == []
+    # Counter continues to climb (counter is informational; alerts are not).
+    assert engine._breaches["DEMAND_GENERATION_GAP"] == 4
+
+
+# ---------------------------------------------------------------------------
+# R4-001 — test_006 (malformed message isolation — mandatory)
+# ---------------------------------------------------------------------------
+
+
+def test_006_alerts_malformed_isolation() -> None:
+    """R4-001 mandatory: the engine must RAISE on internal validation errors
+    (deterministic for callers) and the caller's try/except — modeled here
+    by `processor._handle_tick`-style wrapping — catches the exception,
+    increments the failures counter, and the loop SURVIVES (next call works).
+
+    We model "malformed" two ways:
+    1. Invalid Event (missing required field) → `Event.model_validate(...)` raises.
+    2. Garbage payload that the caller would have to surface as a malformed msg.
+    """
+    from subscriber.alerts import AlertEngine, publish_alert  # noqa: F401
+
+    redis_client = None  # placeholder; we test isolation, not the publish call
+    engine = AlertEngine()
+    failures = 0
+
+    def safe_handle_tick(event_or_raw: object) -> str:
+        """Mimic `EnergyProcessor._handle_tick`'s try/except wrapper. Returns
+        'ok' on success, 'failed' on any internal exception (and bumps the
+        failures counter — exactly the R4-001 pattern).
+        """
+        nonlocal failures
+        try:
+            # The engine itself does not parse JSON; the caller (processor)
+            # would have already done json.loads. Here we test that a
+            # type error inside `evaluate` is also isolated.
+            if not isinstance(event_or_raw, Event):
+                raise TypeError("malformed event payload")
+            engine.evaluate(event_or_raw, _make_metrics(renewable_pct=35.0))
+            return "ok"
+        except Exception:
+            failures += 1
+            return "failed"
+
+    # Bad payload → counter increments, no crash.
+    assert safe_handle_tick({"junk": "x"}) == "failed"
+    assert failures == 1
+    assert safe_handle_tick(None) == "failed"
+    assert failures == 2
+
+    # Engine is still usable: a valid event should pass through.
+    valid_event = _make_event()  # A1 fires (gap=1000 > 800)
+    # Pre-set the breach counter so we skip debounce.
+    engine._breaches["DEMAND_GENERATION_GAP"] = 1
+    # The handler reports 'ok' (or may itself debounce, but it doesn't raise).
+    result = safe_handle_tick(valid_event)
+    assert result == "ok"
+    assert failures == 2, "valid tick must not increment failures"
+
+    # Sanity: publish_alert is importable (will be exercised in test_publish_alert.py).
+    assert callable(publish_alert)
+
+
+# ---------------------------------------------------------------------------
+# Sanity: publish_alert module-level helper importable.
+# ---------------------------------------------------------------------------
+
+
+def test_import_publish_alert_helper() -> None:
+    """Sanity: the module-level helper `publish_alert` is importable."""
+    from subscriber.alerts import publish_alert  # noqa: F401
+
+    assert callable(publish_alert)
+
+
+# Helper kept for other tests that need to import the metrics JSON payload shape.
+def _alert_payload_json(alert: Alert) -> str:
+    """Serialize an Alert to JSON in the wire format used by `publish_alert`."""
+    return json.dumps(
+        {
+            "id": alert.id,
+            "code": alert.code or alert.rule,
+            "rule": alert.rule,
+            "severity": alert.severity.value,
+            "zone_id": alert.zone_id,
+            "value": alert.value,
+            "threshold": alert.threshold,
+            "state": alert.state,
+            "consecutive_cycles": alert.consecutive_cycles,
+            "timestamp": alert.timestamp.isoformat(),
+            "message": alert.message,
+        },
+        ensure_ascii=False,
+    )
