@@ -71,11 +71,23 @@ addopts = [
     "--strict-config",
     "--showlocals",
 ]
+# `conftest.py` marca automáticamente tests/unit y tests/integration. Con
+# `--strict-markers` activo, un marcador no declarado aquí aborta la
+# colección entera, así que ambos tienen que existir en esta lista.
+markers = [
+    "unit: test unitario, sin IO real (usa fakeredis/respx)",
+    "integration: test que requiere servicios externos como Redis",
+]
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:websockets.*",
     "ignore::DeprecationWarning:uvicorn.*",
     "ignore::PendingDeprecationWarning",
+    # pytest-asyncio <1.0 todavía usa la API de event loop policy que Python
+    # 3.14 deprecó. Sin este filtro, `error` lo convierte en fallo y la suite
+    # entera no arranca en distros con Python >= 3.14 (Arch, Fedora).
+    # Se puede quitar al subir a pytest-asyncio 1.x.
+    "ignore:.*event_loop_policy.*:DeprecationWarning",
 ]
 
 # Linting: ruff minimalista para un taller académico
