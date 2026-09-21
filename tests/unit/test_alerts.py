@@ -331,6 +331,114 @@ def test_006_alerts_malformed_isolation() -> None:
 
 
 # ---------------------------------------------------------------------------
+# SHAPE — test_007 (SUB-002 regression: per-zone isolation)
+# ---------------------------------------------------------------------------
+
+
+def test_007_heterogeneous_six_event_cycle_no_spurious_cleared() -> None:
+    """SUB-002 regression: a single publisher cycle drives 6 events through
+    ONE `AlertEngine`. The old impl keyed `_breaches` by rule-code only, so
+    the FIRST non-breach zone that came after the breach in the iteration
+    order would emit a spurious `cleared` alert (counter was > 0 attached to
+    a different zone's history).
+
+    Drive 4 cycles; in each cycle, ATL is the only breach zone:
+      - Cycle 1: ATL M1=17 (BREACH), others M1=80 → 0 alerts (debounce).
+      - Cycle 2: ATL M1=17 (BREACH), others M1=80 → 1 ATL `active`.
+      - Cycle 3: ATL M1=17 (BREACH), others M1=80 → 0 alerts (idempotent).
+      - Cycle 4: ATL M1=80 (LIFT), others M1=80 → 1 ATL `cleared` (cycles=3
+        because the ATL counter reached 3 on cycle 3 before lifting on 4).
+
+    Hard regression: NO zone other than ATL may emit ANY alert across the
+    full 4-cycle run. The buggy impl produces ≥1 spurious `cleared` per
+    cycle (emitted by whichever zone evaluates right after ATL resets the
+    shared global counter).
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    zones = ["BOG", "ANT", "ATL", "VAL", "SAN", "SIN"]
+    breaching_zone = "ATL"
+    breach_m1 = 17.0
+    clean_m1 = 80.0
+
+    def zone_m1(zone: str, cycle: int) -> float:
+        """ATL breaches on cycles 1-3 and lifts on cycle 4; everyone else
+        stays clean for the full run."""
+        if zone == breaching_zone and cycle < 4:
+            return breach_m1
+        return clean_m1
+
+    # Build events with demanda == generacion so A1 (DEMAND_GENERATION_GAP)
+    # never fires; this test isolates the A2 per-zone regression.
+    def event_no_a1(zone: str) -> Event:
+        return _make_event(zona=zone, demanda=1000.0, generacion=1000.0)
+
+    # Collect every alert emitted across the 4 cycles.
+    cycle_alerts: list[list[Alert]] = []
+    for cycle in range(1, 5):
+        result: list[Alert] = []
+        for zone in zones:
+            m1 = zone_m1(zone, cycle)
+            event = event_no_a1(zone)
+            metrics = _make_metrics(renewable_pct=m1, zona=zone)
+            result.extend(engine.evaluate(event, metrics))
+        cycle_alerts.append(result)
+
+    # Cycle 1: debounce suppresses → no alerts published.
+    assert cycle_alerts[0] == [], (
+        f"cycle 1 must be debounced — no alerts. Got: {cycle_alerts[0]}"
+    )
+
+    # Cycle 2: ATL counter hits 2 → exactly one ATL `active` published.
+    assert len(cycle_alerts[1]) == 1, (
+        f"cycle 2 must publish exactly 1 active alert. Got: {cycle_alerts[1]}"
+    )
+    active = cycle_alerts[1][0]
+    assert active.state == "active"
+    assert active.code == "LOW_RENEWABLE"
+    assert active.zone_id == breaching_zone
+    assert active.consecutive_cycles == 2
+
+    # Cycle 3: breach continues → no new alert (idempotent).
+    assert cycle_alerts[2] == [], (
+        f"cycle 3 (continued breach) must be idempotent — no alerts. Got: {cycle_alerts[2]}"
+    )
+
+    # Cycle 4: ATL lifts → exactly one ATL `cleared` with `consecutive_cycles`
+    # frozen at the final counter value (3, because cycles 1-3 all breached).
+    assert len(cycle_alerts[3]) == 1, (
+        f"cycle 4 (breach lifted) must publish exactly 1 cleared alert. "
+        f"Got: {cycle_alerts[3]}"
+    )
+    cleared = cycle_alerts[3][0]
+    assert cleared.state == "cleared"
+    assert cleared.code == "LOW_RENEWABLE"
+    assert cleared.zone_id == breaching_zone
+    assert cleared.consecutive_cycles == 3
+    # Value matches the m1 of the lift event (the condition-lift snapshot).
+    assert cleared.value == clean_m1
+
+    # Hard regression: no zone other than ATL may emit any alert — the old
+    # global-key impl would have produced ≥1 spurious `cleared` from one of
+    # BOG/ANT/VAL/SAN/SIN on each cycle.
+    for cycle_idx, alerts in enumerate(cycle_alerts, start=1):
+        for alert in alerts:
+            assert alert.zone_id == breaching_zone, (
+                f"cycle {cycle_idx}: non-ATL zone emitted alert — SUB-002 bug. "
+                f"Got zone_id={alert.zone_id!r}, code={alert.code!r}, "
+                f"state={alert.state!r}"
+            )
+
+    # No cleared alert in cycles 1-3 (only ATL can clear, and only on lift).
+    for cycle_idx in (1, 2, 3):
+        assert all(a.state != "cleared" for a in cycle_alerts[cycle_idx - 1]), (
+            f"cycle {cycle_idx} must not contain a cleared alert. "
+            f"Got: {cycle_alerts[cycle_idx - 1]}"
+        )
+
+
+# ---------------------------------------------------------------------------
 # Sanity: publish_alert module-level helper importable.
 # ---------------------------------------------------------------------------
 
