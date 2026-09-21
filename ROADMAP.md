@@ -260,21 +260,24 @@ Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review line
 
 ### Bloque Documentación (Día 4)
 
-- [ ] **T-DOC-001** — Completar [`docs/README_TECNICO.md`](docs/README_TECNICO.md) con secciones finales
+- [x] **T-DOC-001** — Completar [`docs/README_TECNICO.md`](docs/README_TECNICO.md) con secciones finales
   - §8 Difficultades encontradas (consolidar lo que reportó cada uno)
   - §9 Próximos pasos (marcar como completado)
   - Agregar: §10 Conclusiones + §11 Referencias + §12 Lecciones aprendidas
+  - (entregado en `docs-day4-2026-09`, PR pendiente; §1 disclaimer + §9 fases + §10 Conclusiones + §11 Referencias + §12 Lecciones)
 
-- [ ] **T-DOC-002** — `docs/DEPLOY.md`
+- [x] **T-DOC-002** — `docs/DEPLOY.md`
   - Setup local paso a paso (`make up` → abrir `localhost:5173`)
   - Deploy del frontend a GH Pages (manual + Actions)
   - Plan B con `cloudflared tunnel` para demo remota
   - Plan C: video de respaldo
+  - (entregado en `docs-day4-2026-09`; Plan A local + Plan B cloudflared + Plan C video + troubleshooting)
 
-- [ ] **T-DOC-003** — `docs/TESTING.md`
+- [x] **T-DOC-003** — `docs/TESTING.md`
   - Cómo correr la suite (`make test`, `make test-cov`)
   - Qué testea cada archivo (`tests/unit/`, `tests/integration/`)
   - Cómo agregar nuevos tests (convenciones, fixtures disponibles en `conftest.py`)
+  - (entregado en `docs-day4-2026-09`; 131 tests + 16 archivos + 10 fixtures + cómo agregar nuevos)
 
 - [ ] **T-DOC-004** — `docs/INTEGRANTES.md` (opcional pero recomendado)
   - Quién hizo qué, con links a commits
