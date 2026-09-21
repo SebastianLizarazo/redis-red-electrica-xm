@@ -1,4 +1,8 @@
 packages:
   - "dashboard"
+
+# esbuild descarga su binario nativo en un script de postinstall. pnpm
+# bloquea esos scripts por defecto, y sin él Vite no puede compilar:
+# `pnpm build` aborta con ERR_PNPM_IGNORED_BUILDS.
 allowBuilds:
-  esbuild: set this to true or false
+  esbuild: true

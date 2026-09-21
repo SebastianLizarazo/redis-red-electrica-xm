@@ -1,0 +1,377 @@
+/*
+ * Estilos del dashboard (T-DASH-010).
+ *
+ * Tema oscuro: un panel de operación se mira durante horas y el fondo
+ * claro cansa. Los colores de estado son los únicos saturados, para que
+ * el ojo vaya directo a lo que está mal.
+ *
+ * Sin framework CSS a propósito: el bundle completo del dashboard pesa
+ * menos que el reset de Bootstrap, y el layout son dos grids.
+ */
+
+:root {
+  --bg: #0f1419;
+  --surface: #182028;
+  --surface-alt: #1f2a35;
+  --border: #2b3947;
+  --text: #e6edf3;
+  --text-dim: #8b9aa8;
+
+  /* Estados operativos. Verde = todo bien, ámbar = degradado, rojo = falla. */
+  --ok: #3fb950;
+  --warn: #d29922;
+  --danger: #f85149;
+  --info: #58a6ff;
+
+  /* Colores por recurso de generación, usados en gráficas y leyendas. */
+  --hidraulica: #58a6ff;
+  --termica: #f0883e;
+  --solar: #e3b341;
+  --eolica: #56d4dd;
+
+  --radius: 10px;
+  --gap: 16px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+#app {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+/* --- Encabezado y banner de modo (T-DASH-002) ------------------------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.header h1 {
+  font-size: 20px;
+  margin: 0;
+  font-weight: 600;
+}
+
+.header .subtitle {
+  color: var(--text-dim);
+  font-size: 13px;
+  margin: 2px 0 0;
+}
+
+.banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-weight: 600;
+  font-size: 14px;
+  border: 1px solid transparent;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.banner .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* El punto late solo cuando algo va mal: un indicador que parpadea todo
+   el tiempo deja de comunicar. */
+.banner.is-degraded .dot,
+.banner.is-down .dot {
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% { opacity: 0.25; }
+}
+
+.banner.is-real {
+  color: var(--ok);
+  background: rgba(63, 185, 80, 0.12);
+  border-color: rgba(63, 185, 80, 0.35);
+}
+
+.banner.is-sim {
+  color: var(--warn);
+  background: rgba(210, 153, 34, 0.12);
+  border-color: rgba(210, 153, 34, 0.35);
+}
+
+.banner.is-degraded,
+.banner.is-down {
+  color: var(--danger);
+  background: rgba(248, 81, 73, 0.12);
+  border-color: rgba(248, 81, 73, 0.35);
+}
+
+.banner .detail {
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+/* --- Tarjetas genéricas ----------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+
+.card h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+
+/* --- KPIs (T-DASH-003) ------------------------------------------------ */
+
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--gap);
+}
+
+.kpi .label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+}
+
+.kpi .value {
+  font-size: 30px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  margin-top: 6px;
+  /* tabular-nums evita que el número "salte" al cambiar de dígitos. */
+}
+
+.kpi .unit {
+  font-size: 14px;
+  color: var(--text-dim);
+  margin-left: 4px;
+  font-weight: 400;
+}
+
+.kpi .value.is-ok { color: var(--ok); }
+.kpi .value.is-warn { color: var(--warn); }
+.kpi .value.is-danger { color: var(--danger); }
+.kpi .value.is-empty { color: var(--text-dim); }
+
+/* --- Layout de gráficas y mapa ---------------------------------------- */
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: var(--gap);
+}
+
+.chart-box {
+  position: relative;
+  height: 280px;
+}
+
+#mapa {
+  height: 380px;
+  border-radius: var(--radius);
+  /* Leaflet pinta tiles claros; el borde evita el corte brusco. */
+  border: 1px solid var(--border);
+}
+
+/* Popups de Leaflet en tema oscuro. */
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip {
+  background: var(--surface-alt);
+  color: var(--text);
+}
+
+.popup-zona strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.popup-zona table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.popup-zona td {
+  padding: 1px 0;
+}
+
+.popup-zona td:last-child {
+  text-align: right;
+  padding-left: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- Panel de alertas (T-DASH-007) ------------------------------------ */
+
+.alertas {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.alerta {
+  border-left: 3px solid var(--text-dim);
+  background: var(--surface-alt);
+  border-radius: 6px;
+  padding: 10px 12px;
+}
+
+.alerta.sev-high { border-left-color: var(--danger); }
+.alerta.sev-medium { border-left-color: var(--warn); }
+.alerta.sev-low { border-left-color: var(--text-dim); }
+
+/* Una alerta resuelta se atenúa en vez de desaparecer: el operador
+   necesita ver que se resolvió, no que se borró. */
+.alerta.is-cleared {
+  opacity: 0.55;
+}
+
+.alerta .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.alerta .regla {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.alerta .hora {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.alerta .mensaje {
+  font-size: 13px;
+  color: var(--text-dim);
+  margin-top: 3px;
+}
+
+.alerta .zona {
+  display: inline-block;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 1px 6px;
+  margin-top: 6px;
+}
+
+/* --- Botones de stress (T-DASH-008) ----------------------------------- */
+
+.stress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 10px;
+}
+
+.stress-btn {
+  background: var(--surface-alt);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.stress-btn:hover:not(:disabled) {
+  border-color: var(--info);
+  background: #24313d;
+}
+
+.stress-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.stress-btn .nombre {
+  display: block;
+  font-weight: 600;
+}
+
+.stress-btn .desc {
+  display: block;
+  font-size: 11px;
+  color: var(--text-dim);
+  margin-top: 2px;
+}
+
+.stress-btn.ok { border-color: var(--ok); }
+.stress-btn.error { border-color: var(--danger); }
+
+.stress-feedback {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin-top: 10px;
+  min-height: 1.4em;
+}
+
+/* --- Estados vacíos / carga ------------------------------------------- */
+
+.vacio {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-style: italic;
+  padding: 10px 0;
+}
+
+.footer {
+  color: var(--text-dim);
+  font-size: 12px;
+  text-align: center;
+  padding: 4px 0 16px;
+}
+
+.footer code {
+  background: var(--surface-alt);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+
+@media (max-width: 640px) {
+  .kpi .value { font-size: 24px; }
+  .chart-box { height: 220px; }
+  #mapa { height: 300px; }
+}
