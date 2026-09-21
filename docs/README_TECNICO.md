@@ -253,26 +253,16 @@ Idempotente, formato configurable:
   `state:zone:SIN` que NO es lo correcto (la key global es
   `state:sin`). El caller decide; documentado.
 
-## 9. Próximos pasos (Fase 1+)
+## 9. Estado de las fases
 
-- **Fase 1 (publisher)**: implementar `XMRealSource`, `SimulatorSource`,
-  `normalizer`, `source_selector` en `publisher/`. Publicar en
-  `energy-events` (Pub/Sub) + `energy:stream` (Stream) +
-  `state:zone:*` (Hashes).
-- **Fase 2 (subscriber)**: processar eventos, calcular M1/M2/M3,
-  evaluar A1/A2 con debounce, housekeeping 60s.
-- **Fase 3 (api)**: FastAPI + SSE con `/api/health`, `/api/state`,
-  `/api/stream`, `/api/stress/{event}`.
-- **Fase 4 (dashboard inicial)**: SSE consumer + primer KPI card
-  funcionando end-to-end con simulador.
-- **Fase 5 (infra completa)**: Dockerfiles publisher/subscriber/api +
-  healthchecks extendidos.
-- **Fase 6 (dashboard completo)**: 4 KPIs, 2 charts, mapa, panel
-  alertas, banner modo, 4 botones stress test.
-- **Fase 7 (docs)**: DEPLOY.md, TESTING.md, INTEGRANTES.md; video de
-  respaldo.
-- **Fase 8 (entrega)**: build de Vite, GH Pages (frontend), demo local
-  (backend) con plan B de `cloudflared`.
+- ✅ **Fase 1 (publisher)** — Edwar. Cerrada 2026-09-20 (PR #2 `76516a3`).
+- ✅ **Fase 2 (subscriber)** — Alejandro. Cerrada 2026-09-20/21 (PRs #6/#7/#8, `9040033`+`c996c33`+`6414973`).
+- ✅ **Fase 3 (api)** — Sebastián. Cerrada 2026-09-21 (PRs #9/#10, `2a5389a`+`99c7230`).
+- ✅ **Fase 4 (dashboard inicial)** — David. En curso (scaffolding listo, componentes T-DASH-001..010 pending).
+- 🟡 **Fase 5 (infra completa)** — Jonathan. Parcial: solo Redis dockerizado; publisher/subscriber/api pendientes (T-INFRA-008..013).
+- 🟡 **Fase 6 (dashboard completo)** — David. En curso (depende de Fase 4).
+- ✅ **Fase 7 (docs)** — Sebastián. Cerrada en este change `docs-day4-2026-09` (PR pendiente).
+- 🟡 **Fase 8 (entrega)** — Sebastián. Demo en vivo programado martes 22-sept-2026.
 
 ---
 
