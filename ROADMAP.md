@@ -9,8 +9,8 @@
 | Día | Fecha | Estado | Foco |
 |-----|-------|--------|------|
 | Día 1 | Sábado 19 | ✅ cerrado | Scaffolding |
-| Día 2 | Domingo 20 | ✅ cerrado | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber core cerrado (sdd `subscriber-core-2026-09` archivado, 3 PRs stacked-to-main, 112/112 verde); **smoke E2E validado** (A1 disparado con gap=4000 MW, A2 con auto-clear, 21 keys en Redis); API/Dashboard/Infra en progreso |
-| Día 3 | Lunes 21 | ✅ cerrado | API cerrado (`api-core-2026-09` archivado — server + state + health + metrics + alerts + stress + stream SSE, 128/128 tests verde, PRs #9+#10 stacked-to-main @ `99c7230`); SUB-002 fixed (per-zone breach state, PR #11); docs-day4 cerrado (README + DEPLOY + TESTING + ROADMAP, PR #12); main @ `706f51e` |
+| Día 2 | Domingo 20 | ✅ cerrado | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber core archivado (3 PRs stacked-to-main, 112/112 verde); **smoke E2E validado** (A1 disparado con gap=4000 MW, A2 con auto-clear, 21 keys en Redis); API/Dashboard/Infra en progreso |
+| Día 3 | Lunes 21 | ✅ cerrado | API cerrado (change `api-core` archivado — server + state + health + metrics + alerts + stress + stream SSE, 128/128 tests verde, PRs #9+#10 stacked-to-main @ `99c7230`); SUB-002 fixed (per-zone breach state, PR #11); docs-day4 cerrado (README + DEPLOY + TESTING + ROADMAP, PR #12); main @ `706f51e` |
 | Día 4 | Martes 22 | ⬜ | Integración end-to-end + docs + demo |
 
 ## Orden sugerido de ejecución
@@ -145,7 +145,7 @@ DÍA 4 (martes 22) ──► integración final + entrega
   - ✅ PR-B: `test_metrics_router.py` (2) + `test_alerts_router.py` (2, end-to-end via `publish_alert`) + `test_stress_router.py` (2, valid 204 + invalid 400)
   - ✅ PR-C: `test_stream_router.py` (2, custom `FastASGITransport` workaround para `httpx + sse-starlette` task-group deadlock + `AppStatus.should_exit_event` autouse reset)
 
-**Chain totals**: 128/128 tests verde (112 baseline + 16 nuevos: 8 PR-A + 6 PR-B + 2 PR-C), sdd-verify PR-A PASS WITH WARNINGS / PR-B PASS / PR-C PASS, 0 regresiones, 0 nuevos errores ruff/mypy. **REQ-API-001..008 satisfechas (8/8)**. ✅ done — **PR #9 (PR-A+PR-B) + PR #10 (PR-C)**, main @ `99c7230`. Artefactos SDD en engram: `sdd/api-core-2026-09/{explore,proposal,spec,design,tasks,apply-progress,verify-report,archive-report}`. Surgical edits: `cors_origins` en `common/config.py`, `state_sin_key()` factory en `common/redis_keys.py`, `app_client` fixture en `tests/conftest.py`, `HealthStatus` extension (PR-A) + `Metric.value: float | None` (PR-B) en `common/models.py`.
+**Chain totals**: 128/128 tests verde (112 baseline + 16 nuevos: 8 PR-A + 6 PR-B + 2 PR-C), 0 regresiones, 0 nuevos errores ruff/mypy. **REQ-API-001..008 satisfechas (8/8)**. ✅ done — **PR #9 (PR-A+PR-B) + PR #10 (PR-C)**, main @ `99c7230`. Surgical edits: `cors_origins` en `common/config.py`, `state_sin_key()` factory en `common/redis_keys.py`, `app_client` fixture en `tests/conftest.py`, `HealthStatus` extension (PR-A) + `Metric.value: float | None` (PR-B) en `common/models.py`.
 
 ---
 
@@ -222,7 +222,7 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 ### Bloque Bounded Correction Publisher (Día 2)
 
-Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review lineage `review-25673e155a477d86` resueltos y runtime-verificados. 3 PRs chained stacked-to-main (#3 PR-A código, #4 PR-B tests + deps fix, #5 PR-C test_008 cerrando V-001).
+Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review resueltos y runtime-verificados. 3 PRs chained stacked-to-main (#3 PR-A código, #4 PR-B tests + deps fix, #5 PR-C test_008 cerrando V-001).
 
 - [x] **T-PHB-001** — `_safe_redis_url` helper con `urllib.parse.urlparse` (R1-001: redact embedded credentials from logged Redis URL)
 - [x] **T-PHB-002** — Reemplazar los 2 call sites de log con `_safe_redis_url(settings.redis_url)` (R1-001)
@@ -233,7 +233,7 @@ Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review line
 - [x] **T-PHB-007** — `tests/unit/test_publisher_main.py` con 7 tests mandatory (R3-001: cubre el shape Pub/Sub, branch `state:sin`, discriminator `type:tick`, per-event isolation, atomicidad)
 - [x] **T-PHB-008** — `test_008_source_switch_raise_isolation` cubre AC7 del verify report (cierra V-001 CRITICAL surgido en primer verify pass)
 
-**Resultado**: 86/86 tests verde, 5/5 CRITICAL resueltos, publisher hardened y listo para que Alejandro construya el subscriber encima. Artefactos SDD en Engram: `sdd/publisher-hardening-2026-09/{proposal,spec,design,tasks,apply-progress,verify-report,archive-report}`.
+**Resultado**: 86/86 tests verde, 5/5 CRITICAL resueltos, publisher hardened y listo para que Alejandro construya el subscriber encima.
 
 ### Bloque Integración (Días 2-4)
 
@@ -308,14 +308,14 @@ Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review line
 
 ## Follow-ups diferidos (no bloquean Día 4; revisar post-entrega o nunca)
 
-Documentados originalmente en `engram:sdd/publisher-hardening-2026-09/{archive-report,verify-report}` (obs #488, #486). NO bloquean la entrega del Día 4 (martes 22-sept) ni la demo. Son mejoras nice-to-have para Fase 5+ si el taller tiene segunda iteración.
+NO bloquean la entrega del Día 4 (martes 22-sept) ni la demo. Son mejoras nice-to-have para Fase 5+ si el taller tiene segunda iteración.
 
 ### De la bounded correction (V-NNN del verify)
 - **V-002 WARNING** — multi-failure counter (extender `test_006` con variant de 2 fallas; spec S2 lo pide)
 - **V-003 SUGGESTION** — `_safe_redis_url` placement debajo de `class Publisher` (drift del design §4)
 - **V-004 SUGGESTION** — typo R4-005 vs R4-003 cross-artifacts (resenar el identificador canónico)
 
-### WARNING originales del 4R bounded review (lineage `review-25673e155a477d86`)
+### WARNING originales del 4R bounded review
 - **R3-002** — `force_source=real` no persiste salud cuando XM falla (banner del dashboard queda stale)
 - **R3-003** — `consecutive_failures` crece sin tope en modo SIM (engañoso para el operador tras 1h de XM caído)
 - **R4-004** — shutdown latency hasta 5 min en REAL mode (amplifica R4-002 bajo SIGKILL)
