@@ -27,7 +27,6 @@ from pydantic import (
     field_validator,
 )
 
-
 # --- Enums y discriminadores -------------------------------------------------
 
 
@@ -172,7 +171,18 @@ class Alert(BaseModel):
     id: str = Field(..., min_length=1, max_length=64)
     rule: str = Field(..., min_length=1, max_length=64)
     severity: AlertSeverity
-    zone_id: ZoneId
+    # Acepta también el centinela `""` de `subscriber.alerts._GLOBAL_ZONE`,
+    # que marca las alertas de alcance sistémico (A1 evalúa el SIN completo,
+    # no una zona). Es el ensanchamiento que `subscriber/alerts.py:214` dejó
+    # anotado para el Día 4.
+    #
+    # Sin esto el centinela rompía el pipeline en la lectura: el subscriber
+    # esquivaba la validación con `model_construct` al escribir, pero
+    # `api/routers/alerts.py` valida con `model_validate_json`, así que TODAS
+    # las alertas A1 se descartaban en silencio y nunca llegaban al
+    # dashboard. En una prueba con 13 alertas en Redis, `/api/alerts`
+    # devolvía 1.
+    zone_id: ZoneId | Literal[""]
     value: float
     threshold: float
     timestamp: AwareDatetime
