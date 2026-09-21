@@ -10,7 +10,7 @@
 |-----|-------|--------|------|
 | Día 1 | Sábado 19 | ✅ cerrado | Scaffolding |
 | Día 2 | Domingo 20 | ✅ cerrado | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber core cerrado (sdd `subscriber-core-2026-09` archivado, 3 PRs stacked-to-main, 112/112 verde); **smoke E2E validado** (A1 disparado con gap=4000 MW, A2 con auto-clear, 21 keys en Redis); API/Dashboard/Infra en progreso |
-| Día 3 | Lunes 21 | ⬜ | API + Frontend (conexión) |
+| Día 3 | Lunes 21 | 🟡 en progreso | API PR-A done (server + state + health + 120 tests verde, main @ `69636cb`); PR-B (metrics + alerts + stress) + PR-C (SSE) pending |
 | Día 4 | Martes 22 | ⬜ | Integración end-to-end + docs + demo |
 
 ## Orden sugerido de ejecución
@@ -116,21 +116,30 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 ### Bloque API REST + SSE (Día 3)
 
-- [ ] **T-API-001** — Implementar `api/server.py`
-  - FastAPI app + `CORSMiddleware` con origins explícitos (localhost:5173 + dominio GH Pages)
-  - Routers: state, metrics, alerts, stream, health, stress
+- [x] **T-API-001** — Implementar `api/server.py` ✅ **PR-A merged** (commit `69636cb`)
+  - FastAPI app + `CORSMiddleware` con origins explícitos (localhost:5173 + dominio GH Pages) — env var `CORS_ORIGINS`
+  - Routers wired en PR-A: state ✅, health ✅ — pendientes en PR-B (metrics + alerts + stress) y PR-C (stream)
   - Lifespan context para abrir/cerrar cliente Redis async
+  - Bonus: `@app.exception_handler(RedisError)` → 503 + `Retry-After: 5`
 
-- [ ] **T-API-002** — `api/routers/state.py` — `GET /api/state` → estado actual por zona
-- [ ] **T-API-003** — `api/routers/metrics.py` — `GET /api/metrics` → M1/M2/M3 actuales
-- [ ] **T-API-004** — `api/routers/alerts.py` — `GET /api/alerts` → alertas recientes (lista) + activas (hash)
-- [ ] **T-API-005** — `api/routers/stream.py` — `GET /api/stream` (SSE)
+- [x] **T-API-002** — `api/routers/state.py` — `GET /api/state` → estado actual por zona ✅ **PR-A merged**
+  - Devuelve `{sin: ZoneState, zones: list[ZoneState]}` (5 zonas geográficas)
+- [ ] **T-API-003** — `api/routers/metrics.py` — `GET /api/metrics` → M1/M2/M3 actuales ⬜ PR-B
+- [ ] **T-API-004** — `api/routers/alerts.py` — `GET /api/alerts` → alertas recientes (lista) + activas (hash) ⬜ PR-B
+- [ ] **T-API-005** — `api/routers/stream.py` — `GET /api/stream` (SSE) ⬜ PR-C
   - Emite eventos `tick`, `alert`, `source_switch` en formato SSE
   - Heartbeat cada 15s para mantener conexión
-- [ ] **T-API-006** — `api/routers/health.py` — `GET /api/health` → `HealthStatus`
-- [ ] **T-API-007** — `api/routers/stress.py` — `POST /api/stress/{event}`
+- [x] **T-API-006** — `api/routers/health.py` — `GET /api/health` → `HealthStatus` ✅ **PR-A merged**
+  - Deriva `uptime_seconds` desde `health:subscriber:started_at`; `redis_ok` desde inline ping
+  - Deviation: `HealthStatus` extendido con `failures`, `source_switches`, `last_failure`, `next_retry_at` (alineado con REQ-API-005 del spec)
+- [ ] **T-API-007** — `api/routers/stress.py` — `POST /api/stress/{event}` ⬜ PR-B
   - Inyecta evento anómalo (demand_surge / hydro_drop / critical_deficit / recovery)
-- [ ] **T-API-008** — Tests de los routers con `httpx` TestClient
+- [ ] **T-API-008** — Tests de los routers con `httpx` TestClient 🟡 parcial
+  - ✅ PR-A: `test_state_router.py` (4 tests, incluye CORS preflight) + `test_health_router.py` (4 tests, incluye redis recovery)
+  - ⬜ PR-B: tests para metrics + alerts + stress routers
+  - ⬜ PR-C: tests para stream router
+
+**PR-A totals**: 120/120 tests verde (era 112 + 8 nuevos), sdd-verify PASS WITH WARNINGS, 0 regresiones, 0 nuevos errores ruff/mypy. Artefactos SDD en engram: `sdd/api-core-2026-09/{explore,proposal,spec,design,tasks,apply-progress,verify-report}`.
 
 ---
 
@@ -379,16 +388,19 @@ Antes de entregar, validar:
 
 ---
 
-## Próxima sesión — prioridades (Día 3)
+## Próxima sesión — prioridades (Día 3 fin / Día 4 arranque)
 
-**Día 3 - Lunes 21 sept** — orden sugerido:
+**Estado al cierre parcial de Día 3 (main @ `69636cb`)**:
 
-1. **T-API-001..008** — FastAPI app + 6 routers (state, metrics, alerts, stream, health, stress) + tests con `httpx` TestClient. Sin asignar formalmente al equipo; Sebastián + orch pueden arrancarlo.
-   - Prereq: el subscriber core ya está en `main`, las keys Redis están estables, los modelos Pydantic listos.
-2. **SUB-002** — Investigar y arreglar el bug de `LOW_RENEWABLE cleared` repetido para `zone_id=VAL`. Probable fix en `subscriber/alerts.py:_evaluate_rule` (separar `_cleared_emitted_this_cycle` flag por rule-code, o emitir cleared solo en el evento donde counter pasa de >0 a 0).
-3. **SUB-001** (opcional) — Migrar `_failures` in-memory a 3 keys Redis INCR separadas para dashboard visibility. Bajo riesgo, alta visibilidad.
+1. ✅ **API PR-A merged** (commit `69636cb`): server shell + lifespan + CORS + 503 handler + state router + health router + 8 tests (state+health, incluye CORS preflight y redis recovery). REQ-API-001/002/005/008 cubiertas. sdd-verify PASS WITH WARNINGS.
+2. ⬜ **API PR-B**: 4 REQs pendientes (REQ-API-003 metrics, REQ-API-004 alerts, REQ-API-006 stress). Routers + tests. Update `api/server.py` para incluirlos en `include_router`. Forecast ~350 LOC.
+3. ⬜ **API PR-C**: REQ-API-007 (SSE stream). Per-connection pubsub + 15s heartbeat + try/finally cleanup. Forecast ~300 LOC.
+4. ⬜ **sdd-archive** final cuando los 3 PRs estén mergeados.
+5. ⬜ **SUB-002** — Investigar y arreglar el bug de `LOW_RENEWABLE cleared` repetido para `zone_id=VAL`. Probable fix en `subscriber/alerts.py:_evaluate_rule` (separar `_cleared_emitted_this_cycle` flag por rule-code, o emitir cleared solo en el evento donde counter pasa de >0 a 0).
+6. ⬜ **SUB-001** (opcional) — Migrar `_failures` in-memory a 3 keys Redis INCR separadas para dashboard visibility. Bajo riesgo, alta visibilidad.
 
 **Contexto completo en Engram** (para retomar la próxima sesión sin perder contexto):
+- `sdd/api-core-2026-09/{explore,proposal,spec,design,tasks,apply-progress,verify-report}` — PR-A cerrado, PR-B/C ready
 - `sdd/subscriber-core-2026-09/{proposal,spec,design,tasks,apply-progress,verify-report,archive-report}` — change cerrado
 - `sdd/publisher-hardening-2026-09/...` — bounded correction Publisher cerrada
 - `architecture/subscriber-isolation` — patrón R4-001 reusable cross-change

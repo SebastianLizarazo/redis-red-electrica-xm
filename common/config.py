@@ -23,12 +23,19 @@ Loading order (pydantic-settings lo hace por ti):
 from __future__ import annotations
 
 import logging
-from typing import List, Union
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from common.models import ZoneId
+
+# Origins permitidos por defecto para el backend FastAPI (CORS).
+# Override por env `CORS_ORIGINS` (CSV) — pydantic-settings parsea el string
+# gracias al field_validator(mode="before") abajo.
+_DEFAULT_CORS_ORIGINS: list[str] = [
+    "http://localhost:5173",
+    "https://sebastianlizarazo.github.io/redis-red-electrica-xm",
+]
 
 
 class Settings(BaseSettings):
@@ -96,6 +103,17 @@ class Settings(BaseSettings):
     # --- Backend FastAPI ----------------------------------------------------
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000, ge=1, le=65535)
+    # Lista de origins permitidos por CORS. Pydantic-settings acepta una
+    # lista JSON en `CORS_ORIGINS=["https://a","https://b"]` o un CSV
+    # gracias al `field_validator(mode="before")` de abajo. El default
+    # cubre dev local (Vite en :5173) y el deploy de GH Pages del taller.
+    cors_origins: str | list[str] = Field(
+        default_factory=lambda: list(_DEFAULT_CORS_ORIGINS),
+        description=(
+            "Lista de origins CORS permitidos. Acepta lista JSON o CSV. "
+            "Override por env CORS_ORIGINS."
+        ),
+    )
 
     # --- Dashboard ----------------------------------------------------------
     vite_api_url: str = Field(
@@ -119,10 +137,10 @@ class Settings(BaseSettings):
     alert_debounce_cycles: int = Field(default=2, ge=1, le=10)
 
     # --- Zonas --------------------------------------------------------------
-    # Tipamos como `Union[str, List[ZoneId]]` para que pydantic-settings
+    # Tipamos como `str | list[ZoneId]` para que pydantic-settings
     # acepte un string desde .env (ej. "ANT,VAL,ATL,BOG,SAN") sin quejarse;
-    # el field_validator(mode="before") lo convierte a List[ZoneId].
-    default_zones: Union[str, List[ZoneId]] = Field(
+    # el field_validator(mode="before") lo convierte a list[ZoneId].
+    default_zones: str | list[ZoneId] = Field(
         default_factory=lambda: ["ANT", "VAL", "ATL", "BOG", "SAN"],
         description="Zonas por defecto (OPEN-1 del design). Acepta lista o CSV.",
     )
@@ -168,6 +186,15 @@ class Settings(BaseSettings):
             return [z.strip().upper() for z in v.split(",") if z.strip()]
         return v
 
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _parse_cors_origins(cls, v):  # noqa: ANN001 - pydantic passes raw
+        # Acepta "http://a,https://b" desde env var (CSV) o ya-lista.
+        # Mismo patrón que `default_zones`.
+        if isinstance(v, str):
+            return [o.strip() for o in v.split(",") if o.strip()]
+        return v
+
     @model_validator(mode="before")
     @classmethod
     def _pre_parse_strings(cls, data):  # noqa: ANN001 - pydantic passes raw
@@ -177,6 +204,12 @@ class Settings(BaseSettings):
             zones = data.get("default_zones")
             if isinstance(zones, str):
                 data = {**data, "default_zones": [z.strip().upper() for z in zones.split(",") if z.strip()]}
+            origins = data.get("cors_origins")
+            if isinstance(origins, str):
+                data = {
+                    **data,
+                    "cors_origins": [o.strip() for o in origins.split(",") if o.strip()],
+                }
         return data
 
 

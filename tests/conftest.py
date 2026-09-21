@@ -222,6 +222,44 @@ def zones_default() -> list[ZoneId]:
 
 
 # ----------------------------------------------------------------------
+# FastAPI app fixture (api-core-2026-09 PR-A)
+# ----------------------------------------------------------------------
+
+
+@pytest_asyncio.fixture
+async def app_client(fakeredis_async_client):  # noqa: ANN001 - pytest fixture composition
+    """
+    App FastAPI con `dependency_overrides` para tests de routers API.
+
+    - Crea la app via `api.server.create_app()` (mismo path que producción).
+    - Sustituye `get_redis` para devolver el `fakeredis_async_client` del fixture
+      anterior — un swap de 1 línea, cero cambios en los routers.
+    - Devuelve un `httpx.AsyncClient(transport=ASGITransport(app))` listo
+      para `await client.get("/api/health")` dentro de tests async.
+    - El lifespan se activa con `async with AsyncClient(...)` automáticamente
+      (httpx dispara el startup/shutdown de la ASGI app).
+
+    Tests que necesitan sembrar Redis antes del request deben usar
+    `fakeredis_async_client` ANTES de hacer `await client.get(...)`
+    (las llamadas en serie sobre el mismo fixture funcionan).
+    """
+    from httpx import ASGITransport, AsyncClient
+
+    from api.dependencies import get_redis
+    from api.server import create_app
+
+    app = create_app()
+    app.dependency_overrides[get_redis] = lambda: fakeredis_async_client
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://testserver") as client:
+        yield client
+
+    # Limpiar overrides para que un próximo test que reuse la app parta limpio.
+    app.dependency_overrides.clear()
+
+
+# ----------------------------------------------------------------------
 # Hooks de pytest
 # ----------------------------------------------------------------------
 
