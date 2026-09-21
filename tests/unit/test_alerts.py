@@ -132,7 +132,7 @@ def test_001_alerts_shape_returns_list_of_alerts() -> None:
     assert alerts_cycle1 == [], "cycle 1 must be debounced — no alert published"
 
     # Simulate prior cycle already incremented the counter (cycle 2 effectively).
-    engine._breaches["DEMAND_GENERATION_GAP"] = 1
+    engine._breaches[("DEMAND_GENERATION_GAP", "")] = 1
     alerts_cycle2 = engine.evaluate(event, metrics)
     assert len(alerts_cycle2) == 1, "cycle 2 must publish exactly one active alert"
 
@@ -144,7 +144,7 @@ def test_001_alerts_shape_returns_list_of_alerts() -> None:
     assert a.severity == AlertSeverity.HIGH
     assert a.threshold == 800.0
     assert a.value == 1000.0  # demanda - generacion
-    assert a.zone_id == "ANT"
+    assert a.zone_id == ""  # A1 zone_id is the _GLOBAL_ZONE sentinel
 
 
 # ---------------------------------------------------------------------------
@@ -165,8 +165,8 @@ def test_002_alerts_debounce_first_cycle_no_publish() -> None:
     # Cycle 1: no publish.
     a1 = engine.evaluate(event, metrics)
     assert a1 == [], "cycle 1 must be suppressed by debounce"
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 1
-    assert engine._breaches.get("LOW_RENEWABLE", 0) == 0
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 1
+    assert engine._breaches.get(("LOW_RENEWABLE", "ANT"), 0) == 0
 
     # Cycle 2: active alert fires.
     a2 = engine.evaluate(event, metrics)
@@ -174,7 +174,7 @@ def test_002_alerts_debounce_first_cycle_no_publish() -> None:
     assert a2[0].state == "active"
     assert a2[0].consecutive_cycles == 2
     assert a2[0].code == "DEMAND_GENERATION_GAP"
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 2
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ def test_003_alerts_auto_clear_publishes_cleared_with_final_cycles() -> None:
     # Cycle 2: active alert fires.
     cycle2 = engine.evaluate(breach_event, metrics)
     assert len(cycle2) == 1 and cycle2[0].state == "active"
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 2
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 2
 
     # Cycle 3: condition lifts → cleared fires.
     cleared = engine.evaluate(ok_event, metrics)
@@ -208,7 +208,7 @@ def test_003_alerts_auto_clear_publishes_cleared_with_final_cycles() -> None:
     assert c.state == "cleared"
     assert c.code == "DEMAND_GENERATION_GAP"
     assert c.consecutive_cycles == 2  # frozen at the final value
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 0
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ def test_005_alerts_idempotent_when_breach_continues() -> None:
     # Cycle 4: still no publish.
     assert engine.evaluate(event, metrics) == []
     # Counter continues to climb (counter is informational; alerts are not).
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 4
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 4
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +320,7 @@ def test_006_alerts_malformed_isolation() -> None:
     # Engine is still usable: a valid event should pass through.
     valid_event = _make_event()  # A1 fires (gap=1000 > 800)
     # Pre-set the breach counter so we skip debounce.
-    engine._breaches["DEMAND_GENERATION_GAP"] = 1
+    engine._breaches[("DEMAND_GENERATION_GAP", "")] = 1
     # The handler reports 'ok' (or may itself debounce, but it doesn't raise).
     result = safe_handle_tick(valid_event)
     assert result == "ok"
@@ -328,6 +328,278 @@ def test_006_alerts_malformed_isolation() -> None:
 
     # Sanity: publish_alert is importable (will be exercised in test_publish_alert.py).
     assert callable(publish_alert)
+
+
+# ---------------------------------------------------------------------------
+# SHAPE — test_007 (SUB-002 regression: per-zone isolation)
+# ---------------------------------------------------------------------------
+
+
+def test_007_heterogeneous_six_event_cycle_no_spurious_cleared() -> None:
+    """SUB-002 regression: a single publisher cycle drives 6 events through
+    ONE `AlertEngine`. The old impl keyed `_breaches` by rule-code only, so
+    the FIRST non-breach zone that came after the breach in the iteration
+    order would emit a spurious `cleared` alert (counter was > 0 attached to
+    a different zone's history).
+
+    Drive 4 cycles; in each cycle, ATL is the only breach zone:
+      - Cycle 1: ATL M1=17 (BREACH), others M1=80 → 0 alerts (debounce).
+      - Cycle 2: ATL M1=17 (BREACH), others M1=80 → 1 ATL `active`.
+      - Cycle 3: ATL M1=17 (BREACH), others M1=80 → 0 alerts (idempotent).
+      - Cycle 4: ATL M1=80 (LIFT), others M1=80 → 1 ATL `cleared` (cycles=3
+        because the ATL counter reached 3 on cycle 3 before lifting on 4).
+
+    Hard regression: NO zone other than ATL may emit ANY alert across the
+    full 4-cycle run. The buggy impl produces ≥1 spurious `cleared` per
+    cycle (emitted by whichever zone evaluates right after ATL resets the
+    shared global counter).
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    zones = ["BOG", "ANT", "ATL", "VAL", "SAN", "SIN"]
+    breaching_zone = "ATL"
+    breach_m1 = 17.0
+    clean_m1 = 80.0
+
+    def zone_m1(zone: str, cycle: int) -> float:
+        """ATL breaches on cycles 1-3 and lifts on cycle 4; everyone else
+        stays clean for the full run."""
+        if zone == breaching_zone and cycle < 4:
+            return breach_m1
+        return clean_m1
+
+    # Build events with demanda == generacion so A1 (DEMAND_GENERATION_GAP)
+    # never fires; this test isolates the A2 per-zone regression.
+    def event_no_a1(zone: str) -> Event:
+        return _make_event(zona=zone, demanda=1000.0, generacion=1000.0)
+
+    # Collect every alert emitted across the 4 cycles.
+    cycle_alerts: list[list[Alert]] = []
+    for cycle in range(1, 5):
+        result: list[Alert] = []
+        for zone in zones:
+            m1 = zone_m1(zone, cycle)
+            event = event_no_a1(zone)
+            metrics = _make_metrics(renewable_pct=m1, zona=zone)
+            result.extend(engine.evaluate(event, metrics))
+        cycle_alerts.append(result)
+
+    # Cycle 1: debounce suppresses → no alerts published.
+    assert cycle_alerts[0] == [], (
+        f"cycle 1 must be debounced — no alerts. Got: {cycle_alerts[0]}"
+    )
+
+    # Cycle 2: ATL counter hits 2 → exactly one ATL `active` published.
+    assert len(cycle_alerts[1]) == 1, (
+        f"cycle 2 must publish exactly 1 active alert. Got: {cycle_alerts[1]}"
+    )
+    active = cycle_alerts[1][0]
+    assert active.state == "active"
+    assert active.code == "LOW_RENEWABLE"
+    assert active.zone_id == breaching_zone
+    assert active.consecutive_cycles == 2
+
+    # Cycle 3: breach continues → no new alert (idempotent).
+    assert cycle_alerts[2] == [], (
+        f"cycle 3 (continued breach) must be idempotent — no alerts. Got: {cycle_alerts[2]}"
+    )
+
+    # Cycle 4: ATL lifts → exactly one ATL `cleared` with `consecutive_cycles`
+    # frozen at the final counter value (3, because cycles 1-3 all breached).
+    assert len(cycle_alerts[3]) == 1, (
+        f"cycle 4 (breach lifted) must publish exactly 1 cleared alert. "
+        f"Got: {cycle_alerts[3]}"
+    )
+    cleared = cycle_alerts[3][0]
+    assert cleared.state == "cleared"
+    assert cleared.code == "LOW_RENEWABLE"
+    assert cleared.zone_id == breaching_zone
+    assert cleared.consecutive_cycles == 3
+    # Value matches the m1 of the lift event (the condition-lift snapshot).
+    assert cleared.value == clean_m1
+
+    # Hard regression: no zone other than ATL may emit any alert — the old
+    # global-key impl would have produced ≥1 spurious `cleared` from one of
+    # BOG/ANT/VAL/SAN/SIN on each cycle.
+    for cycle_idx, alerts in enumerate(cycle_alerts, start=1):
+        for alert in alerts:
+            assert alert.zone_id == breaching_zone, (
+                f"cycle {cycle_idx}: non-ATL zone emitted alert — SUB-002 bug. "
+                f"Got zone_id={alert.zone_id!r}, code={alert.code!r}, "
+                f"state={alert.state!r}"
+            )
+
+    # No cleared alert in cycles 1-3 (only ATL can clear, and only on lift).
+    for cycle_idx in (1, 2, 3):
+        assert all(a.state != "cleared" for a in cycle_alerts[cycle_idx - 1]), (
+            f"cycle {cycle_idx} must not contain a cleared alert. "
+            f"Got: {cycle_alerts[cycle_idx - 1]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# SHAPE — test_008 (per-zone independence: ATL active+cleared, VAL never touches)
+# ---------------------------------------------------------------------------
+
+
+def test_008_per_zone_independence() -> None:
+    """SUB-002 characterization: ATL breaches for 3 cycles and lifts on cycle 4.
+    VAL runs through the same 4 cycles but with m1>=80 the whole time (no
+    breach). VAL MUST NEVER:
+      - have a counter entry under the per-zone LOW_RENEWABLE key, OR
+      - emit any alert (active or cleared).
+
+    Old impl produced a spurious cleared for VAL on cycle 1 because the
+    counter was incremented by ATL and then reset by VAL's non-breach
+    evaluation. This test makes that regression impossible to re-introduce.
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    # Events with demanda == generacion so A1 (DEMAND_GENERATION_GAP) never
+    # fires; this test isolates A2's per-zone independence.
+    atl_event = _make_event(zona="ATL", demanda=1000.0, generacion=1000.0)
+    val_event = _make_event(zona="VAL", demanda=1000.0, generacion=1000.0)
+
+    # ATL M1 sequence: 28, 27, 29 (breach), 80 (lift).
+    # VAL M1 sequence: 82, 83, 84, 81 (clean throughout).
+    atl_m1 = [28.0, 27.0, 29.0, 80.0]
+    val_m1 = [82.0, 83.0, 84.0, 81.0]
+
+    cycle_alerts: list[list[Alert]] = []
+    for i in range(4):
+        # ATL evaluates first (per zone iteration order in the publish cycle).
+        atl_alerts = engine.evaluate(
+            atl_event, _make_metrics(renewable_pct=atl_m1[i], zona="ATL")
+        )
+        val_alerts = engine.evaluate(
+            val_event, _make_metrics(renewable_pct=val_m1[i], zona="VAL")
+        )
+        cycle_alerts.append(atl_alerts + val_alerts)
+
+    # Cycle 1: both ATL (debounce) and VAL (clean) → no alerts.
+    assert cycle_alerts[0] == [], (
+        f"cycle 1 must be debounced for ATL and clean for VAL. Got: {cycle_alerts[0]}"
+    )
+
+    # Cycle 2: ATL counter hits 2 → 1 ATL active published. VAL still clean.
+    assert len(cycle_alerts[1]) == 1, (
+        f"cycle 2 must publish exactly 1 ATL active. Got: {cycle_alerts[1]}"
+    )
+    a = cycle_alerts[1][0]
+    assert a.state == "active"
+    assert a.code == "LOW_RENEWABLE"
+    assert a.zone_id == "ATL"
+    assert a.consecutive_cycles == 2
+
+    # Cycle 3: ATL breach continues (idempotent). VAL still clean.
+    assert cycle_alerts[2] == [], (
+        f"cycle 3 must be idempotent for ATL and clean for VAL. Got: {cycle_alerts[2]}"
+    )
+
+    # Cycle 4: ATL counter reaches 3, then lifts → 1 ATL cleared with
+    # consecutive_cycles=3. VAL still clean.
+    assert len(cycle_alerts[3]) == 1, (
+        f"cycle 4 must publish exactly 1 ATL cleared. Got: {cycle_alerts[3]}"
+    )
+    c = cycle_alerts[3][0]
+    assert c.state == "cleared"
+    assert c.code == "LOW_RENEWABLE"
+    assert c.zone_id == "ATL"
+    assert c.consecutive_cycles == 3
+    # Value matches the m1 of the lift event (snapshot at condition-lift).
+    assert c.value == 80.0
+
+    # VAL's counter must NEVER exist — non-breach zones do not allocate keys.
+    assert engine._breaches.get(("LOW_RENEWABLE", "VAL"), 0) == 0, (
+        "VAL must not have a counter entry; non-breach zones don't allocate keys"
+    )
+    assert ("LOW_RENEWABLE", "VAL") not in engine._breaches, (
+        "VAL must not appear as a key in _breaches"
+    )
+
+    # No alert anywhere in the 4-cycle run may be from VAL.
+    for cycle_idx, alerts in enumerate(cycle_alerts, start=1):
+        for alert in alerts:
+            assert alert.zone_id != "VAL", (
+                f"cycle {cycle_idx}: VAL emitted an alert — SUB-002 bug. "
+                f"Got: zone_id={alert.zone_id!r}, code={alert.code!r}, "
+                f"state={alert.state!r}"
+            )
+
+    # Total alert count across 4 cycles = exactly 2 (1 active + 1 cleared).
+    total = sum(len(a) for a in cycle_alerts)
+    assert total == 2, f"expected exactly 2 alerts total (1 active + 1 cleared). Got {total}"
+
+
+# ---------------------------------------------------------------------------
+# SHAPE — test_009 (A1 global + A2 per-zone simultaneously — independent counters)
+# ---------------------------------------------------------------------------
+
+
+def test_009_a1_and_a2_simultaneous_with_distinct_counters() -> None:
+    """RC for A1 (global) + A2 (per-zone): when both rules' conditions hold
+    on the same tick, they MUST publish INDEPENDENTLY with their own
+    counters under the new tuple-keyed _breaches dict.
+
+    Setup (zone = ANT):
+      - A1 condition holds: demanda - generacion = 1000 > 800.
+      - A2 condition holds: m1 = 20 < 30.
+
+    Cycle 1: both debounce → [].
+    Cycle 2: both reach their debounce threshold → 2 alerts:
+      - 1 A1 active with zone_id="" (sentinel), consecutive_cycles=2.
+      - 1 A2 active with zone_id="ANT", consecutive_cycles=2.
+
+    Under the new key shape:
+      - _breaches[("DEMAND_GENERATION_GAP", "")] = 2 (A1 global).
+      - _breaches[("LOW_RENEWABLE", "ANT")] = 2 (A2 per-zone).
+    The two counters live under disjoint keys and never interfere.
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    event = _make_event(
+        zona="ANT",
+        demanda=1800.0,
+        generacion=800.0,  # gap = 1000 > 800 → A1 fires
+        solar=20.0,
+        eolica=20.0,
+        hidro=50.0,
+        termica=710.0,
+    )
+    metrics = _make_metrics(renewable_pct=20.0, zona="ANT")  # m1 < 30 → A2 fires
+
+    # Cycle 1: debounce for both → [].
+    assert engine.evaluate(event, metrics) == []
+
+    # Cycle 2: BOTH fire (each counter reaches DEBOUNCE_CYCLES independently).
+    alerts = engine.evaluate(event, metrics)
+    assert len(alerts) == 2, f"expected 2 alerts, got {len(alerts)}: {alerts}"
+
+    by_code = {a.code: a for a in alerts}
+    assert set(by_code.keys()) == {"DEMAND_GENERATION_GAP", "LOW_RENEWABLE"}
+
+    a1 = by_code["DEMAND_GENERATION_GAP"]
+    assert a1.state == "active"
+    assert a1.zone_id == ""  # _GLOBAL_ZONE sentinel
+    assert a1.consecutive_cycles == 2
+    assert a1.severity == AlertSeverity.HIGH
+
+    a2 = by_code["LOW_RENEWABLE"]
+    assert a2.state == "active"
+    assert a2.zone_id == "ANT"
+    assert a2.consecutive_cycles == 2
+    assert a2.severity == AlertSeverity.MEDIUM
+
+    # Counters are independent and disjoint under the new tuple key shape.
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 2
+    assert engine._breaches[("LOW_RENEWABLE", "ANT")] == 2
+
+    # Neither counter leaks into the other's slot — tuple keys are disjoint.
+    assert ("DEMAND_GENERATION_GAP", "ANT") not in engine._breaches
+    assert ("LOW_RENEWABLE", "") not in engine._breaches
 
 
 # ---------------------------------------------------------------------------
