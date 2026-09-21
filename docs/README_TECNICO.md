@@ -281,6 +281,16 @@ Idempotente, formato configurable:
 - [fakeredis-py](https://github.com/cunla/fakeredis-py) — fixture de tests sin Redis real (usado por `fakeredis_async_client`).
 - [`docs/SMOKE_TEST_subscriber.md`](docs/SMOKE_TEST_subscriber.md) — guía de smoke E2E validada en Día 2 (publisher → subscriber → Redis).
 
+## 12. Lecciones aprendidas
+
+- **Arquitectura**: el Protocol `DataSource` rindió — switching XM ↔ simulador fue un cambio de 5 líneas en `common/config.py`, no un refactor. La lección: tipar las dependencias externas como protocolos `runtime_checkable` paga el costo del typing en DX y testabilidad.
+- **TDD**: la convención SHAPE-first (un test `test_001_*_shape` antes de los tests de comportamiento) forzó diseñar la forma de los datos antes del comportamiento. Atrapó 2 bugs de contrato temprano: el wire format del publisher (R3-001) y la forma de la `Alert` antes de calcular reglas.
+- **Resiliencia**: el patrón R4-001 (try/except por evento con contadores separados y `continue`) fue reusable cross-componente — apareció igual en publisher (`publisher/main.py`), subscriber (`subscriber/processor.py`) y API exception handler. Codificar la resiliencia como patrón replicable vale la pena; copiar el `except` específico no.
+- **Discovery**: bugs sutiles estilo "race" (SUB-002) vienen de **inconsistencias semánticas** (contador global + métrica per-zona con lógicas distintas), no de concurrencia. Lección: auditar el grafo de flujo de datos, no solo los locks. El test E2E de smoke fue lo único que expuso el drift.
+- **DevEx**: los shortcuts `make up` / `make test` / `make lint` / `make ci` dejaron a cada contribuidor productivo en sus primeros 10 minutos. Vale la pena invertir el primer día en esto; el retorno aparece cuando hay 5 personas tocando el repo en paralelo.
+- **Spec drift**: una deviation (`Alert.zone_id="SIN"` cuando correspondía zona geográfica, REQ-SUB-ALERTS-002) sobrevivió 3 PRs antes de flagearse. Lección: agregar un "spec adherence check" explícito al checklist de `sdd-verify` para la próxima iteración — leer la spec como parte del review, no solo el diff de código.
+- **Documentación como código**: tener el spec en engram (`sdd/{change}/spec`) y el código en disco, cerrando ambos en un único PR, evitó que spec y código se desincronicen. La doc de Fase 0 que se escribió junto al código inicial sigue vigente tres días después sin necesidad de rework.
+
 ---
 
 **Owner**: Sebastián · **Status**: Fase 0 cerrada · **Próxima fase**: 1
