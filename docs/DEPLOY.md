@@ -42,7 +42,7 @@ del equipo con todo instalado.
    python -m api.server
    ```
 
-6. **Dashboard Vite** (terminal 5):
+5. **Dashboard Vite** (terminal 5):
 
    ```bash
    cd dashboard && pnpm dev
@@ -127,7 +127,7 @@ sistema funcionando.
 
 ### Secuencia a grabar (~5 min)
 
-1. Levantar stack completo (Plan A pasos 1–4).
+1. Levantar stack completo (Plan A pasos 1–5).
 2. Mostrar publisher corriendo (logs visibles, eventos publicando).
 3. Forzar `demand_surge` desde el dashboard → alerta aparece en panel
    lateral.
