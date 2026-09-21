@@ -9,7 +9,7 @@
 | Día | Fecha | Estado | Foco |
 |-----|-------|--------|------|
 | Día 1 | Sábado 19 | ✅ cerrado | Scaffolding |
-| Día 2 | Domingo 20 | 🟡 parcial | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber/API/Dashboard/Infra en progreso |
+| Día 2 | Domingo 20 | 🟡 parcial | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber core cerrado (Alejandro ✅, sdd `subscriber-core-2026-09` archivado); API/Dashboard/Infra en progreso |
 | Día 3 | Lunes 21 | ⬜ | API + Frontend (conexión) |
 | Día 4 | Martes 22 | ⬜ | Integración end-to-end + docs + demo |
 
@@ -25,7 +25,7 @@ DÍA 1 (sábado 19) ──► todos en paralelo sobre la base de Fase 0
 
 DÍA 2 (domingo 20) ──► conexión publisher ↔ subscriber ↔ Redis
   Edwar       cierra publisher/main.py + source_selector.py + tests
-  Alejandro   cierra subscriber/processor.py + main.py + tests con fakeredis
+  Alejandro   ✅ cierra subscriber/processor.py + main.py + tests con fakeredis (subscriber-core-2026-09 archivado, 3 PRs stacked-to-main, 112/112 verde)
   David       componentes que leen estado (KPIs, line chart)
   Jonathan    actualiza docker-compose con publisher + subscriber + healthchecks
   Sebastián   integración local publisher↔subscriber↔Redis (smoke end-to-end)
@@ -87,32 +87,32 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 ### Bloque Subscriber (Día 1-2)
 
-- [ ] **T-SUB-001** — Implementar `subscriber/metrics.py`
+- [x] **T-SUB-001** — Implementar `subscriber/metrics.py`
   - **M1 (% renovable)**: `(solar + eólica + hidro) / generación_total * 100`
   - **M2 (balance demanda-generación)**: `demanda - generación_total`
   - **M3 (variación % demanda)**: `(demanda_actual - demanda_ventana_atras) / demanda_ventana_atras * 100`
   - Persiste en Hash `metrics` y ZSet `metrics:demand:history` (score = timestamp)
 
-- [ ] **T-SUB-002** — Implementar `subscriber/alerts.py`
+- [x] **T-SUB-002** — Implementar `subscriber/alerts.py`
   - **A1 (déficit crítico)**: dispara si `demanda - generación > 800 MW` (severidad HIGH)
   - **A2 (% renovable bajo)**: dispara si `% renovable < 30%` (severidad MEDIUM)
   - Debounce de 2 ciclos (no spamear alertas repetidas)
   - Escribe en Pub/Sub con `type=alert` y en List `alerts:recent` (LPUSH + LTRIM 0 19)
   - Contador `alerts:total` con INCR
 
-- [ ] **T-SUB-003** — Implementar `subscriber/processor.py`
+- [x] **T-SUB-003** — Implementar `subscriber/processor.py`
   - SUBSCRIBE a `energy-events` con `get_message(timeout=1.0)` (permite housekeeping 60s)
   - Para cada evento: leer state anterior → calcular M1/M2/M3 → evaluar A1/A2 → escribir a Hashes y Stream
   - Discriminador `type=alert` vs `type=tick` (re-emite alertas por canal separado si querés)
 
-- [ ] **T-SUB-004** — Implementar `subscriber/main.py`
+- [x] **T-SUB-004** — Implementar `subscriber/main.py`
   - Setup Redis async, registra signal handlers (SIGTERM → shutdown limpio)
   - Housekeeping cada 60s: `ZREMRANGEBYSCORE` en `metrics:demand:history` (mantener ventana 1h)
   - Healthcheck en `health:uptime` (timestamp de arranque)
 
-- [ ] **T-SUB-005** — Tests unitarios de `metrics.py` (TDD estándar)
-- [ ] **T-SUB-006** — Tests unitarios de `alerts.py` (TDD estándar)
-- [ ] **T-SUB-007** — Tests de integración de `processor.py` con `fakeredis`
+- [x] **T-SUB-005** — Tests unitarios de `metrics.py` (TDD estándar)
+- [x] **T-SUB-006** — Tests unitarios de `alerts.py` (TDD estándar)
+- [x] **T-SUB-007** — Tests de integración de `processor.py` con `fakeredis`
 
 ### Bloque API REST + SSE (Día 3)
 
