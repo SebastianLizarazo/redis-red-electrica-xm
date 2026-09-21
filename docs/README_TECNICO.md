@@ -6,6 +6,8 @@
 
 ## 1. ¿Qué es?
 
+> **Disclaimer**: Es un modelo, no un dato medido. La magnitud del sistema sí es real cuando la fuente es XM; el reparto por zonas y el despacho de generación son una simplificación documentada del design. Para datos auditables consultar XM directamente.
+
 Monitor en tiempo real del Sistema Interconectado Nacional (SIN) colombiano
 que usa [Redis](https://redis.io) como bus de datos principal. El sistema
 consume la API pública de [XM](https://www.xm.com.co/) (operador del SIN),
