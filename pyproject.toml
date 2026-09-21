@@ -128,7 +128,6 @@ plugins = ["pydantic.mypy"]
 strict = false
 warn_return_any = true
 warn_unused_configs = true
-discover_untyped_supports = false
 check_untyped_defs = true
 ignore_missing_imports = false
 exclude = [

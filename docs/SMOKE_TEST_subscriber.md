@@ -7,8 +7,8 @@ alertas correctamente. Requisito: Redis en `localhost:6379` y Python 3.11+ en `.
 
 ```powershell
 # Terminal 1: Redis
-docker compose up -d redis
-# O: redis-server (si lo tenés instalado localmente)
+docker compose -f infra/docker-compose.yml up -d redis
+# O: make up (wrapper del mismo comando) / redis-server (si lo tenés instalado localmente)
 
 # Terminal 2: .venv + dependencias
 .venv\Scripts\Activate.ps1
@@ -19,7 +19,7 @@ pip install -e ".[dev]"
 
 ```powershell
 # Terminal 3: publisher con XM deshabilitado (forzar sim)
-$env:XM_FORCE_SOURCE="simulator"
+$env:FORCE_SOURCE="simulator"
 $env:PUBLISHER_INTERVAL_SECONDS="5"
 python -m publisher.main
 ```

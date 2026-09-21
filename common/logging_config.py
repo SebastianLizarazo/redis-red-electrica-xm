@@ -62,7 +62,7 @@ class _HumanFormatter(logging.Formatter):
 
     def __init__(self) -> None:
         super().__init__(
-            fmt="%(asctime)sZ %(levelname)-7s [%(name)s] %(message)s",
+            fmt="%(asctime)s %(levelname)-7s [%(name)s] %(message)s",
             datefmt="%Y-%m-%dT%H:%M:%S",
         )
 

@@ -143,7 +143,7 @@ class Settings(BaseSettings):
     default_zones: str | list[ZoneId] = Field(
         default_factory=lambda: ["ANT", "VAL", "ATL", "BOG", "SAN"],
         description="Zonas por defecto (OPEN-1 del design). Acepta lista o CSV.",
-    )
+    )  # type: ignore[assignment]
 
     # --- Misc ---------------------------------------------------------------
     stale_threshold_seconds: int = Field(
