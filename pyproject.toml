@@ -43,7 +43,10 @@ dev = [
     "httpx>=0.27,<1.0",
     "ruff>=0.6,<1.0",
     "mypy>=1.10,<2.0",
-    "types-redis>=4.6,<5.0",
+    # types-redis se quitó a propósito: desde redis 5.0 el paquete trae sus
+    # propios tipos (`redis/py.typed`) y el stub externo, congelado en la
+    # API de redis 4.x, los tapaba. Eso hacía que mypy reportara como error
+    # `aclose()` — un método que sí existe en runtime — en subscriber/ y api/.
     "pydataxm>=0.1,<2.0",
 ]
 
@@ -115,6 +118,12 @@ select = [
 ignore = [
     "E501",  # line-too-long: ruff line-length ya lo cubre
     "B008",  # function call in default argument (Pydantic Field)
+    # UP042 propone migrar `class X(str, Enum)` a `StrEnum`. NO lo hacemos:
+    # `DataSource` y `AlertSeverity` viajan en el wire format de Redis y
+    # StrEnum cambia el resultado de `str(X.MIEMBRO)` (devuelve el valor en
+    # vez de "Clase.MIEMBRO"). Sería un cambio de comportamiento silencioso
+    # en cualquier f-string que interpole el enum.
+    "UP042",
 ]
 
 [tool.ruff.lint.per-file-ignores]

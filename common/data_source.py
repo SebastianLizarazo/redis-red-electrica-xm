@@ -20,7 +20,6 @@ from typing import Protocol, runtime_checkable
 
 from common.models import Event
 
-
 # Custom exceptions: viven aquí para que publisher Y tests las puedan
 # capturar sin acoplar al módulo que las lanza originalmente.
 

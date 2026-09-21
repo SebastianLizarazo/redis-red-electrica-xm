@@ -11,18 +11,13 @@ Ejecuta las verificaciones del checklist de T-INFRA-001 a T-INT-005:
 
 from __future__ import annotations
 
-import asyncio
-import json
 import sys
-import tempfile
-from datetime import datetime, timezone
-from pathlib import Path
-
+from datetime import UTC, datetime
 
 # --- imports básicos ---
 
 def test_imports() -> None:
-    from common import models, redis_keys, data_source, config, logging_config
+    from common import config, data_source, logging_config, models, redis_keys
     assert models
     assert redis_keys
     assert data_source
@@ -31,18 +26,19 @@ def test_imports() -> None:
 
 
 def test_models_zoneid_literal() -> None:
-    from common.models import ZoneId, Event, EventData, DataSource, Location
     # ZoneId es Literal — 5 zonas geográficas + "SIN" global.
     import typing
+
+    from common.models import ZoneId
     args = typing.get_args(ZoneId)
     assert set(args) == {"ANT", "VAL", "ATL", "BOG", "SAN", "SIN"}
 
 
 def test_models_event_constructible() -> None:
-    from common.models import Event, EventData, DataSource, Location
+    from common.models import DataSource, Event, EventData, Location
     e = Event(
         entity_id="SIN",
-        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC),
         location=Location(latitude=4.5, longitude=-74.1),
         data=EventData(
             demanda_mw=10_500.0,
@@ -65,12 +61,13 @@ def test_models_event_constructible() -> None:
 
 
 def test_models_event_validates_negative() -> None:
-    from common.models import Event, EventData, DataSource, Location
     from pydantic import ValidationError
+
+    from common.models import DataSource, Event, EventData, Location
     try:
         Event(
             entity_id="SIN",
-            timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=timezone.utc),
+            timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC),
             location=Location(latitude=4.5, longitude=-74.1),
             data=EventData(
                 demanda_mw=-1.0,
@@ -88,12 +85,18 @@ def test_models_event_validates_negative() -> None:
 
 
 def test_redis_keys_factories() -> None:
-    from common.redis_keys import (
-        PUBSUB_CHANNEL_ENERGY, STREAM_ENERGY_MAXLEN, STREAM_ENERGY,
-        state_zone_key, alerts_active_key, stress_key, alert_severity_in_channel,
-        STATE_ZONE_TTL_SECONDS, DEMAND_HISTORY_WINDOW_SECONDS,
-    )
     from common.models import AlertSeverity as AS
+    from common.redis_keys import (
+        DEMAND_HISTORY_WINDOW_SECONDS,
+        PUBSUB_CHANNEL_ENERGY,
+        STATE_ZONE_TTL_SECONDS,
+        STREAM_ENERGY,
+        STREAM_ENERGY_MAXLEN,
+        alert_severity_in_channel,
+        alerts_active_key,
+        state_zone_key,
+        stress_key,
+    )
     assert PUBSUB_CHANNEL_ENERGY == "energy-events"
     assert STREAM_ENERGY == "energy:stream"
     assert STREAM_ENERGY_MAXLEN == 1000
@@ -108,7 +111,10 @@ def test_redis_keys_factories() -> None:
 
 def test_data_source_protocol() -> None:
     from common.data_source import (
-        DataSource, DataSourceError, DataSourceTimeoutError, InvalidXMResponseError,
+        DataSource,
+        DataSourceError,
+        DataSourceTimeoutError,
+        InvalidXMResponseError,
     )
     # DataSource es Protocol — debe ser runtime_checkable (isinstance).
     class Fake:
@@ -167,6 +173,7 @@ def test_config_loads_dotenv(tmp_path) -> None:
 
 def test_logging_setup() -> None:
     import logging
+
     from common.logging_config import setup_logging
     setup_logging("INFO", json_format=False)
     setup_logging("DEBUG", json_format=True)  # idempotente

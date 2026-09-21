@@ -47,7 +47,7 @@ def _zone_state_from_hash(zone_id: ZoneId, raw: dict[str, str]) -> ZoneState:
 async def get_state(redis: Redis = Depends(get_redis)) -> dict:
     """Snapshot agregado: SIN + 5 zonas geográficas."""
     # SIN primero (el más consultado por el dashboard).
-    sin_raw = await redis.hgetall(state_sin_key())
+    sin_raw = await redis.hgetall(state_sin_key())  # type: ignore[misc]  # redis-py tipa los comandos como Awaitable[T] | T
 
     # 5 zonas en orden canónico. Usamos un pipeline para ahorrar round-trips.
     # `cast` necesario porque `ZONES_GEO` está tipado como `tuple[str, ...]`

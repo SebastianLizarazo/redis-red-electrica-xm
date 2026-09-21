@@ -26,7 +26,6 @@ from common.redis_keys import (
     KEY_METRICS_RENEWABLE,
 )
 
-
 # Units (símbolos canónicos para que la API y el dashboard rendericen igual).
 UNIT_PERCENT = "%"
 UNIT_MW = "MW"
@@ -107,7 +106,7 @@ async def persist_metrics(redis: Redis, metrics: dict[str, dict[str, Any]]) -> N
         raw_value = metric["value"]
         # None → "NaN" string (fakeredis y redis-py escriben todo como texto).
         hash_value = "NaN" if raw_value is None else float(raw_value)
-        await redis.hset(
+        await redis.hset(  # type: ignore[misc]  # redis-py tipa los comandos como Awaitable[T] | T
             redis_key,
             mapping={
                 "value": hash_value,

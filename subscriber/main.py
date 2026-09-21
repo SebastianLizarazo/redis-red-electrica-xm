@@ -30,10 +30,9 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import logging
 import signal
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from redis.asyncio import Redis
 
@@ -55,7 +54,7 @@ async def _boot_health(redis: Redis) -> None:
     anyway — these keys are observability, not correctness.
     """
     now_unix = time.time()
-    now_iso = datetime.now(timezone.utc).isoformat()
+    now_iso = datetime.now(UTC).isoformat()
     try:
         await redis.set(KEY_HEALTH_SUBSCRIBER_UPTIME, str(int(now_unix)))
         await redis.set(KEY_HEALTH_SUBSCRIBER_STARTED_AT, now_iso)

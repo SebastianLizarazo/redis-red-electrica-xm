@@ -293,8 +293,8 @@ async def publish_alert(redis: Redis, alert: Alert) -> None:
     # 3. Total counter.
     await redis.incr(KEY_ALERTS_TOTAL)
     # 4. Recent list (cap 20).
-    await redis.lpush(KEY_RECENT_ALERTS, alert.id)
-    await redis.ltrim(KEY_RECENT_ALERTS, 0, _RECENT_ALERTS_TRIM_TO)
+    await redis.lpush(KEY_RECENT_ALERTS, alert.id)  # type: ignore[misc]  # redis-py tipa los comandos como Awaitable[T] | T
+    await redis.ltrim(KEY_RECENT_ALERTS, 0, _RECENT_ALERTS_TRIM_TO)  # type: ignore[misc]  # redis-py tipa los comandos como Awaitable[T] | T
     # 5. Per-code active counter (INCR on active, DECR clamped on cleared).
     counter_key = alerts_active_key(code)
     if alert.state == "active":
