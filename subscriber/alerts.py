@@ -210,9 +210,10 @@ class AlertEngine:
         preserving `frozen=True`. A2 alerts pass through the validating
         constructor since `event.entity_id` is a real `ZoneId`.
 
-        See spec sdd/subscriber-bugfix-2026-09/spec §Notes on deviation #2:
-        widening `Alert.zone_id` to accept the `_GLOBAL_ZONE` sentinel is
-        flagged for Day 4+ spec cleanup (not fixed in this bounded change).
+        See PR #11 (commit 6580c14) for the deviation rationale that
+        motivated this workaround: widening `Alert.zone_id` to accept the
+        `_GLOBAL_ZONE` sentinel is flagged for Day 4+ spec cleanup
+        (not fixed in this bounded change).
         """
         kwargs: dict[str, object] = {
             "id": str(uuid.uuid4()),
