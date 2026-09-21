@@ -289,7 +289,7 @@ Idempotente, formato configurable:
 - **Discovery**: bugs sutiles estilo "race" (SUB-002) vienen de **inconsistencias semánticas** (contador global + métrica per-zona con lógicas distintas), no de concurrencia. Lección: auditar el grafo de flujo de datos, no solo los locks. El test E2E de smoke fue lo único que expuso el drift.
 - **DevEx**: los shortcuts `make up` / `make test` / `make lint` / `make ci` dejaron a cada contribuidor productivo en sus primeros 10 minutos. Vale la pena invertir el primer día en esto; el retorno aparece cuando hay 5 personas tocando el repo en paralelo.
 - **Spec drift**: una deviation (`Alert.zone_id="SIN"` cuando correspondía zona geográfica, REQ-SUB-ALERTS-002) sobrevivió 3 PRs antes de flagearse. Lección: agregar un "spec adherence check" explícito al checklist de `sdd-verify` para la próxima iteración — leer la spec como parte del review, no solo el diff de código.
-- **Documentación como código**: tener el spec en engram (`sdd/{change}/spec`) y el código en disco, cerrando ambos en un único PR, evitó que spec y código se desincronicen. La doc de Fase 0 que se escribió junto al código inicial sigue vigente tres días después sin necesidad de rework.
+- **Documentación como código**: tener el spec versionado junto al código en el mismo PR, evitó que spec y código se desincronicen. La doc de Fase 0 que se escribió junto al código inicial sigue vigente tres días después sin necesidad de rework.
 
 ---
 
