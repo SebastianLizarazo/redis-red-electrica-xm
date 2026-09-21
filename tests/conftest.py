@@ -1,7 +1,7 @@
 """
 Fixtures compartidos para pytest.
 
-Recordatorio de política: este proyecto tiene Strict TDD **OFF** (obs #458),
+Recordatorio de política: este proyecto usa TDD STANDARD (laxo),
 pero mantener fixtures limpios evita regresiones silenciosas y mejora la
 DX del equipo. Los tests son recomendados, no bloqueantes.
 

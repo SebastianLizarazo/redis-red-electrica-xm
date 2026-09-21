@@ -1,6 +1,6 @@
 """Tests for `api.routers.stress` (REQ-API-006 de spec #510).
 
-Convención STANDARD (obs #458): TDD laxo, tests con código OK.
+Convención STANDARD: TDD laxo, tests con código OK.
 
 Cobertura:
 - test_001 HAPPY: `POST /api/stress/demand_surge` → 204 + Redis tiene

@@ -1,6 +1,6 @@
 """Tests for `api.routers.alerts` (REQ-API-004 de spec #510).
 
-Convención STANDARD (obs #458): TDD laxo, tests con código OK.
+Convención STANDARD: TDD laxo, tests con código OK.
 
 Cobertura:
 - test_001 HAPPY: recent (list[Alert]) + active (dict[str,int]) poblados vía

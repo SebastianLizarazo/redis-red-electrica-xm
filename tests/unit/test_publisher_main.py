@@ -1,7 +1,7 @@
 """
 Tests unitarios de `publisher/main.py` (T-PHB-007, R3-001).
 
-Cubre el contrato de las 5 REQs del spec obs #478:
+Cubre el contrato de las 5 REQs del spec publisher-hardening (PRs #3, #4, #5):
 - REQ-PHB-001 : redacción de URL con userinfo embebido (test_001).
 - REQ-PHB-002 : shape de `_aplanar`, branch SIN-key, payload Pub/Sub
                 (test_002, test_003, test_004).

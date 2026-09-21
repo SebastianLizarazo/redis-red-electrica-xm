@@ -1,6 +1,6 @@
 """Tests for `api.routers.health` (REQ-API-005 + REQ-API-008 de spec #510).
 
-Convención STANDARD (obs #458): TDD laxo, tests con código OK.
+Convención STANDARD: TDD laxo, tests con código OK.
 
 Cobertura:
 - test_001 HEALTHY: health:* + subscriber:started_at poblados → redis_ok=True, uptime>0.

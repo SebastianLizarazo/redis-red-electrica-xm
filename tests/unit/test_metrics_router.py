@@ -1,6 +1,6 @@
 """Tests for `api.routers.metrics` (REQ-API-003 de spec #510).
 
-Convención STANDARD (obs #458): TDD laxo, tests con código OK.
+Convención STANDARD: TDD laxo, tests con código OK.
 
 Cobertura:
 - test_001 HAPPY: 3 hashes con valores numéricos → 3 items, todos con value numérico.

@@ -1,6 +1,6 @@
 """Tests for `api.routers.stream` (REQ-API-007 de spec #510).
 
-Convención STANDARD (obs #458): TDD laxo, tests con código OK.
+Convención STANDARD: TDD laxo, tests con código OK.
 
 Cobertura:
 - test_001 HAPPY: el cliente recibe un `event: tick` en <1s tras publicar

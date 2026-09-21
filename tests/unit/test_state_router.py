@@ -1,6 +1,6 @@
 """Tests for `api.routers.state` (REQ-API-002 de spec #510).
 
-Convención STANDARD (obs #458): TDD laxo, tests con código OK. Pero
+Convención STANDARD: TDD laxo, tests con código OK. Pero
 los tests son obligatorios para routers y deben cubrir happy + edge
 cases del spec.
 
