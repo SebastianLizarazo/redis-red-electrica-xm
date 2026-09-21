@@ -258,9 +258,12 @@ Idempotente, formato configurable:
 - ✅ **Fase 1 (publisher)** — Edwar. Cerrada 2026-09-20 (PR #2 `76516a3`).
 - ✅ **Fase 2 (subscriber)** — Alejandro. Cerrada 2026-09-20/21 (PRs #6/#7/#8, `9040033`+`c996c33`+`6414973`).
 - ✅ **Fase 3 (api)** — Sebastián. Cerrada 2026-09-21 (PRs #9/#10, `2a5389a`+`99c7230`).
-- ✅ **Fase 4 (dashboard inicial)** — David. En curso (scaffolding listo, componentes T-DASH-001..010 pending).
-- 🟡 **Fase 5 (infra completa)** — Jonathan. Parcial: solo Redis dockerizado; publisher/subscriber/api pendientes (T-INFRA-008..013).
-- 🟡 **Fase 6 (dashboard completo)** — David. En curso (depende de Fase 4).
+- ✅ **Fase 4 y 6 (dashboard)** — Cerradas 2026-09-21. T-DASH-001..010: banner de modo,
+  4 KPIs, 2 gráficas Chart.js, mapa Leaflet, panel de alertas, botones de stress,
+  cliente SSE con reconexión y backoff, y estilos.
+- ✅ **Fase 5 (infra completa)** — Cerrada 2026-09-21. T-INFRA-008..013: tres Dockerfiles,
+  compose con los 4 servicios y healthchecks, CI (ruff + mypy + pytest + build del
+  dashboard) y deploy a GitHub Pages.
 - ✅ **Fase 7 (docs)** — Sebastián. Cerrada en este change `docs-day4-2026-09` (PR pendiente).
 - 🟡 **Fase 8 (entrega)** — Sebastián. Demo en vivo programado martes 22-sept-2026.
 

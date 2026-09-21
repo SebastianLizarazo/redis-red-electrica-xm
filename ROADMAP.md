@@ -153,43 +153,43 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 > **Refs técnicas útiles**: [`docs/README_TECNICO.md` §3 estructura dashboard](docs/README_TECNICO.md#3-estructura-del-repositorio-fase-0), [§7 criterio "Dashboard"](docs/README_TECNICO.md#7-mapeo-a-la-rúbrica-del-taller-sección-27)
 
-- [ ] **T-DASH-001** — Setup Vite completo (si no quedó hecho en Fase 0)
+- [x] **T-DASH-001** — Setup Vite completo (si no quedó hecho en Fase 0)
   - `vite.config.js` con server en `0.0.0.0:5173`, build a `dist/`
   - `index.html` con contenedor root y carga `src/main.js`
 
-- [ ] **T-DASH-002** — Componente Banner de modo
+- [x] **T-DASH-002** — Componente Banner de modo
   - Lee `GET /api/health` cada 5s
   - Muestra "MODO: REAL" (verde) / "MODO: SIMULADOR" (amarillo) / "MODO: DEGRADADO" (rojo)
 
-- [ ] **T-DASH-003** — Componente KPI cards (4 KPIs)
+- [x] **T-DASH-003** — Componente KPI cards (4 KPIs)
   - Demanda actual (MW), Generación actual (MW), % renovable, Balance neto
   - Auto-refresh desde SSE o polling 5s
 
-- [ ] **T-DASH-004** — Componente LineChart (Chart.js) — Demanda vs Generación en tiempo real
+- [x] **T-DASH-004** — Componente LineChart (Chart.js) — Demanda vs Generación en tiempo real
   - Línea demanda (azul), línea generación (verde), eje X = tiempo
 
-- [ ] **T-DASH-005** — Componente LineChart histórico de demanda
+- [x] **T-DASH-005** — Componente LineChart histórico de demanda
   - Datos desde `GET /api/metrics` o vía SSE, ventana últimos 30 min
 
-- [ ] **T-DASH-006** — Componente Mapa (Leaflet)
+- [x] **T-DASH-006** — Componente Mapa (Leaflet)
   - Mapa de Colombia centrado, 5 markers para ANT/VAL/ATL/BOG/SAN
   - Color del marker según balance (verde = generación > demanda, rojo = déficit)
   - Click → muestra detalles de la zona
 
-- [ ] **T-DASH-007** — Componente Panel de alertas
+- [x] **T-DASH-007** — Componente Panel de alertas
   - Lista de alertas recientes desde `GET /api/alerts`
   - Color por severidad (HIGH rojo, MEDIUM amarillo, LOW gris)
   - Auto-refresh vía SSE cuando llega `type=alert`
 
-- [ ] **T-DASH-008** — Componente Botones de stress test
+- [x] **T-DASH-008** — Componente Botones de stress test
   - 4 botones: demand_surge, hydro_drop, critical_deficit, recovery
   - `POST /api/stress/{event}` y feedback visual
 
-- [ ] **T-DASH-009** — Cliente SSE
+- [x] **T-DASH-009** — Cliente SSE
   - Conexión a `GET /api/stream`, parsea eventos, dispatch a componentes
   - Reconnect automático con backoff si se cae
 
-- [ ] **T-DASH-010** — Estilos finales (CSS) — diseño limpio, paleta de colores consistente
+- [x] **T-DASH-010** — Estilos finales (CSS) — diseño limpio, paleta de colores consistente
 
 ---
 
@@ -197,20 +197,20 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 > **Refs técnicas útiles**: [`docs/README_TECNICO.md` §5 cómo arrancar](docs/README_TECNico.md#5-cómo-arrancar-fase-0), [§3 infra](docs/README_TECNICO.md#3-estructura-del-repositorio-fase-0)
 
-- [ ] **T-INFRA-008** — `infra/Dockerfile.publisher` (Python 3.12-slim + deps runtime)
-- [ ] **T-INFRA-009** — `infra/Dockerfile.subscriber`
-- [ ] **T-INFRA-010** — `infra/Dockerfile.api`
-- [ ] **T-INFRA-011** — Actualizar `infra/docker-compose.yml`
+- [x] **T-INFRA-008** — `infra/Dockerfile.publisher` (Python 3.12-slim + deps runtime)
+- [x] **T-INFRA-009** — `infra/Dockerfile.subscriber`
+- [x] **T-INFRA-010** — `infra/Dockerfile.api`
+- [x] **T-INFRA-011** — Actualizar `infra/docker-compose.yml`
   - Servicios: redis, publisher, subscriber, api + dashboard-dev (opcional)
   - Red común `red-electrica-net`
   - Healthchecks por servicio
   - Volumen para datos Redis (opcional, debug)
 
-- [ ] **T-INFRA-012** — `.github/workflows/ci.yml`
+- [x] **T-INFRA-012** — `.github/workflows/ci.yml`
   - Job: install deps → `ruff check .` → `mypy .` → `pytest --cov`
   - Trigger en PRs y push a main
 
-- [ ] **T-INFRA-013** — Configurar deploy del frontend
+- [x] **T-INFRA-013** — Configurar deploy del frontend
   - `.github/workflows/pages.yml` que buildea Vite y deploya `dist/` a GH Pages
   - Actualizar `vite.config.js` con `base: '/redis-red-electrica-xm/'`
 

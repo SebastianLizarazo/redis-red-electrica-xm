@@ -16,12 +16,37 @@ del equipo con todo instalado.
 - Node.js 18 o superior y pnpm 11+ (para el dashboard).
 - Docker + docker compose (solo para levantar Redis).
 
-### Pasos
+### Opción 1 — todo en Docker (recomendada para la demo)
 
-1. **Levantar Redis** (en una terminal):
+Dos comandos y dos terminales:
+
+```bash
+make up                      # Redis + publisher + subscriber + API
+cd dashboard && pnpm dev     # dashboard con hot-reload
+```
+
+Comprobar que el backend quedó arriba antes de abrir el navegador:
+
+```bash
+curl localhost:8000/api/health
+make ps                      # los 4 contenedores en "healthy"
+```
+
+Si el dashboard también se quiere dentro de Docker:
+
+```bash
+make up-dev                  # añade el servicio dashboard-dev
+```
+
+### Opción 2 — procesos a mano (útil para depurar)
+
+Deja Redis en Docker y corre el resto en terminales separadas, así se ven
+los logs de cada componente por separado:
+
+1. **Redis** (terminal 1):
 
    ```bash
-   make up
+   make up-redis
    ```
 
 2. **Publisher** (terminal 2):
@@ -103,8 +128,28 @@ Para el dashboard remoto, **build estático**:
 cd dashboard && pnpm build        # genera dashboard/dist/
 ```
 
-Subir `dashboard/dist/` a Netlify Drop, GitHub Pages (`gh-pages`
-branch), o cualquier CDN estático.
+Subir `dashboard/dist/` a Netlify Drop, GitHub Pages, o cualquier CDN
+estático.
+
+#### GitHub Pages automático
+
+El workflow `.github/workflows/pages.yml` publica `dashboard/dist/` en
+Pages con cada push a `main` que toque `dashboard/`. Antes del primer run
+hay que ir a **Settings → Pages → Source = GitHub Actions**.
+
+Dos detalles que hacen la diferencia entre una página que funciona y una
+que carga en blanco:
+
+- El build usa `base: '/redis-red-electrica-xm/'` porque Pages sirve el
+  sitio bajo la ruta del repositorio. Ya está en `vite.config.js`.
+- **Pages solo aloja archivos estáticos**: no puede correr la API ni
+  Redis. Sin un backend accesible desde internet, el dashboard carga pero
+  se queda en «SIN CONEXIÓN». Hay que apuntarlo al tunnel de `cloudflared`
+  definiendo la variable de repositorio `DASHBOARD_API_URL` (Settings →
+  Secrets and variables → Actions → Variables), o lanzando el workflow a
+  mano desde la pestaña Actions con el campo `api_url`.
+- Ese dominio también tiene que estar en `CORS_ORIGINS` de la API, o el
+  navegador bloqueará las respuestas aunque lleguen con 200.
 
 ### CORS
 
