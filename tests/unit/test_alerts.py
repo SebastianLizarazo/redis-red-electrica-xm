@@ -439,6 +439,101 @@ def test_007_heterogeneous_six_event_cycle_no_spurious_cleared() -> None:
 
 
 # ---------------------------------------------------------------------------
+# SHAPE — test_008 (per-zone independence: ATL active+cleared, VAL never touches)
+# ---------------------------------------------------------------------------
+
+
+def test_008_per_zone_independence() -> None:
+    """SUB-002 characterization: ATL breaches for 3 cycles and lifts on cycle 4.
+    VAL runs through the same 4 cycles but with m1>=80 the whole time (no
+    breach). VAL MUST NEVER:
+      - have a counter entry under the per-zone LOW_RENEWABLE key, OR
+      - emit any alert (active or cleared).
+
+    Old impl produced a spurious cleared for VAL on cycle 1 because the
+    counter was incremented by ATL and then reset by VAL's non-breach
+    evaluation. This test makes that regression impossible to re-introduce.
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    # Events with demanda == generacion so A1 (DEMAND_GENERATION_GAP) never
+    # fires; this test isolates A2's per-zone independence.
+    atl_event = _make_event(zona="ATL", demanda=1000.0, generacion=1000.0)
+    val_event = _make_event(zona="VAL", demanda=1000.0, generacion=1000.0)
+
+    # ATL M1 sequence: 28, 27, 29 (breach), 80 (lift).
+    # VAL M1 sequence: 82, 83, 84, 81 (clean throughout).
+    atl_m1 = [28.0, 27.0, 29.0, 80.0]
+    val_m1 = [82.0, 83.0, 84.0, 81.0]
+
+    cycle_alerts: list[list[Alert]] = []
+    for i in range(4):
+        # ATL evaluates first (per zone iteration order in the publish cycle).
+        atl_alerts = engine.evaluate(
+            atl_event, _make_metrics(renewable_pct=atl_m1[i], zona="ATL")
+        )
+        val_alerts = engine.evaluate(
+            val_event, _make_metrics(renewable_pct=val_m1[i], zona="VAL")
+        )
+        cycle_alerts.append(atl_alerts + val_alerts)
+
+    # Cycle 1: both ATL (debounce) and VAL (clean) → no alerts.
+    assert cycle_alerts[0] == [], (
+        f"cycle 1 must be debounced for ATL and clean for VAL. Got: {cycle_alerts[0]}"
+    )
+
+    # Cycle 2: ATL counter hits 2 → 1 ATL active published. VAL still clean.
+    assert len(cycle_alerts[1]) == 1, (
+        f"cycle 2 must publish exactly 1 ATL active. Got: {cycle_alerts[1]}"
+    )
+    a = cycle_alerts[1][0]
+    assert a.state == "active"
+    assert a.code == "LOW_RENEWABLE"
+    assert a.zone_id == "ATL"
+    assert a.consecutive_cycles == 2
+
+    # Cycle 3: ATL breach continues (idempotent). VAL still clean.
+    assert cycle_alerts[2] == [], (
+        f"cycle 3 must be idempotent for ATL and clean for VAL. Got: {cycle_alerts[2]}"
+    )
+
+    # Cycle 4: ATL counter reaches 3, then lifts → 1 ATL cleared with
+    # consecutive_cycles=3. VAL still clean.
+    assert len(cycle_alerts[3]) == 1, (
+        f"cycle 4 must publish exactly 1 ATL cleared. Got: {cycle_alerts[3]}"
+    )
+    c = cycle_alerts[3][0]
+    assert c.state == "cleared"
+    assert c.code == "LOW_RENEWABLE"
+    assert c.zone_id == "ATL"
+    assert c.consecutive_cycles == 3
+    # Value matches the m1 of the lift event (snapshot at condition-lift).
+    assert c.value == 80.0
+
+    # VAL's counter must NEVER exist — non-breach zones do not allocate keys.
+    assert engine._breaches.get(("LOW_RENEWABLE", "VAL"), 0) == 0, (
+        "VAL must not have a counter entry; non-breach zones don't allocate keys"
+    )
+    assert ("LOW_RENEWABLE", "VAL") not in engine._breaches, (
+        "VAL must not appear as a key in _breaches"
+    )
+
+    # No alert anywhere in the 4-cycle run may be from VAL.
+    for cycle_idx, alerts in enumerate(cycle_alerts, start=1):
+        for alert in alerts:
+            assert alert.zone_id != "VAL", (
+                f"cycle {cycle_idx}: VAL emitted an alert — SUB-002 bug. "
+                f"Got: zone_id={alert.zone_id!r}, code={alert.code!r}, "
+                f"state={alert.state!r}"
+            )
+
+    # Total alert count across 4 cycles = exactly 2 (1 active + 1 cleared).
+    total = sum(len(a) for a in cycle_alerts)
+    assert total == 2, f"expected exactly 2 alerts total (1 active + 1 cleared). Got {total}"
+
+
+# ---------------------------------------------------------------------------
 # Sanity: publish_alert module-level helper importable.
 # ---------------------------------------------------------------------------
 
