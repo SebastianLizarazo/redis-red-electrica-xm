@@ -534,6 +534,75 @@ def test_008_per_zone_independence() -> None:
 
 
 # ---------------------------------------------------------------------------
+# SHAPE — test_009 (A1 global + A2 per-zone simultaneously — independent counters)
+# ---------------------------------------------------------------------------
+
+
+def test_009_a1_and_a2_simultaneous_with_distinct_counters() -> None:
+    """RC for A1 (global) + A2 (per-zone): when both rules' conditions hold
+    on the same tick, they MUST publish INDEPENDENTLY with their own
+    counters under the new tuple-keyed _breaches dict.
+
+    Setup (zone = ANT):
+      - A1 condition holds: demanda - generacion = 1000 > 800.
+      - A2 condition holds: m1 = 20 < 30.
+
+    Cycle 1: both debounce → [].
+    Cycle 2: both reach their debounce threshold → 2 alerts:
+      - 1 A1 active with zone_id="" (sentinel), consecutive_cycles=2.
+      - 1 A2 active with zone_id="ANT", consecutive_cycles=2.
+
+    Under the new key shape:
+      - _breaches[("DEMAND_GENERATION_GAP", "")] = 2 (A1 global).
+      - _breaches[("LOW_RENEWABLE", "ANT")] = 2 (A2 per-zone).
+    The two counters live under disjoint keys and never interfere.
+    """
+    from subscriber.alerts import AlertEngine
+
+    engine = AlertEngine()
+    event = _make_event(
+        zona="ANT",
+        demanda=1800.0,
+        generacion=800.0,  # gap = 1000 > 800 → A1 fires
+        solar=20.0,
+        eolica=20.0,
+        hidro=50.0,
+        termica=710.0,
+    )
+    metrics = _make_metrics(renewable_pct=20.0, zona="ANT")  # m1 < 30 → A2 fires
+
+    # Cycle 1: debounce for both → [].
+    assert engine.evaluate(event, metrics) == []
+
+    # Cycle 2: BOTH fire (each counter reaches DEBOUNCE_CYCLES independently).
+    alerts = engine.evaluate(event, metrics)
+    assert len(alerts) == 2, f"expected 2 alerts, got {len(alerts)}: {alerts}"
+
+    by_code = {a.code: a for a in alerts}
+    assert set(by_code.keys()) == {"DEMAND_GENERATION_GAP", "LOW_RENEWABLE"}
+
+    a1 = by_code["DEMAND_GENERATION_GAP"]
+    assert a1.state == "active"
+    assert a1.zone_id == ""  # _GLOBAL_ZONE sentinel
+    assert a1.consecutive_cycles == 2
+    assert a1.severity == AlertSeverity.HIGH
+
+    a2 = by_code["LOW_RENEWABLE"]
+    assert a2.state == "active"
+    assert a2.zone_id == "ANT"
+    assert a2.consecutive_cycles == 2
+    assert a2.severity == AlertSeverity.MEDIUM
+
+    # Counters are independent and disjoint under the new tuple key shape.
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 2
+    assert engine._breaches[("LOW_RENEWABLE", "ANT")] == 2
+
+    # Neither counter leaks into the other's slot — tuple keys are disjoint.
+    assert ("DEMAND_GENERATION_GAP", "ANT") not in engine._breaches
+    assert ("LOW_RENEWABLE", "") not in engine._breaches
+
+
+# ---------------------------------------------------------------------------
 # Sanity: publish_alert module-level helper importable.
 # ---------------------------------------------------------------------------
 
