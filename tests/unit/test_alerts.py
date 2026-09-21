@@ -132,7 +132,7 @@ def test_001_alerts_shape_returns_list_of_alerts() -> None:
     assert alerts_cycle1 == [], "cycle 1 must be debounced — no alert published"
 
     # Simulate prior cycle already incremented the counter (cycle 2 effectively).
-    engine._breaches["DEMAND_GENERATION_GAP"] = 1
+    engine._breaches[("DEMAND_GENERATION_GAP", "")] = 1
     alerts_cycle2 = engine.evaluate(event, metrics)
     assert len(alerts_cycle2) == 1, "cycle 2 must publish exactly one active alert"
 
@@ -144,7 +144,7 @@ def test_001_alerts_shape_returns_list_of_alerts() -> None:
     assert a.severity == AlertSeverity.HIGH
     assert a.threshold == 800.0
     assert a.value == 1000.0  # demanda - generacion
-    assert a.zone_id == "ANT"
+    assert a.zone_id == ""  # A1 zone_id is the _GLOBAL_ZONE sentinel
 
 
 # ---------------------------------------------------------------------------
@@ -165,8 +165,8 @@ def test_002_alerts_debounce_first_cycle_no_publish() -> None:
     # Cycle 1: no publish.
     a1 = engine.evaluate(event, metrics)
     assert a1 == [], "cycle 1 must be suppressed by debounce"
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 1
-    assert engine._breaches.get("LOW_RENEWABLE", 0) == 0
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 1
+    assert engine._breaches.get(("LOW_RENEWABLE", "ANT"), 0) == 0
 
     # Cycle 2: active alert fires.
     a2 = engine.evaluate(event, metrics)
@@ -174,7 +174,7 @@ def test_002_alerts_debounce_first_cycle_no_publish() -> None:
     assert a2[0].state == "active"
     assert a2[0].consecutive_cycles == 2
     assert a2[0].code == "DEMAND_GENERATION_GAP"
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 2
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -199,7 +199,7 @@ def test_003_alerts_auto_clear_publishes_cleared_with_final_cycles() -> None:
     # Cycle 2: active alert fires.
     cycle2 = engine.evaluate(breach_event, metrics)
     assert len(cycle2) == 1 and cycle2[0].state == "active"
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 2
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 2
 
     # Cycle 3: condition lifts → cleared fires.
     cleared = engine.evaluate(ok_event, metrics)
@@ -208,7 +208,7 @@ def test_003_alerts_auto_clear_publishes_cleared_with_final_cycles() -> None:
     assert c.state == "cleared"
     assert c.code == "DEMAND_GENERATION_GAP"
     assert c.consecutive_cycles == 2  # frozen at the final value
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 0
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -270,7 +270,7 @@ def test_005_alerts_idempotent_when_breach_continues() -> None:
     # Cycle 4: still no publish.
     assert engine.evaluate(event, metrics) == []
     # Counter continues to climb (counter is informational; alerts are not).
-    assert engine._breaches["DEMAND_GENERATION_GAP"] == 4
+    assert engine._breaches[("DEMAND_GENERATION_GAP", "")] == 4
 
 
 # ---------------------------------------------------------------------------
@@ -320,7 +320,7 @@ def test_006_alerts_malformed_isolation() -> None:
     # Engine is still usable: a valid event should pass through.
     valid_event = _make_event()  # A1 fires (gap=1000 > 800)
     # Pre-set the breach counter so we skip debounce.
-    engine._breaches["DEMAND_GENERATION_GAP"] = 1
+    engine._breaches[("DEMAND_GENERATION_GAP", "")] = 1
     # The handler reports 'ok' (or may itself debounce, but it doesn't raise).
     result = safe_handle_tick(valid_event)
     assert result == "ok"

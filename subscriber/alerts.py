@@ -48,19 +48,33 @@ DEBOUNCE_CYCLES = 2
 RULE_A1 = "DEMAND_GENERATION_GAP"
 RULE_A2 = "LOW_RENEWABLE"
 
+# Sentinel zone_id for A1 (DEMAND_GENERATION_GAP): this rule is system-wide,
+# not zone-scoped, so its breach counter lives under a single global key
+# `("DEMAND_GENERATION_GAP", _GLOBAL_ZONE)`. The empty string is invalid as
+# a `ZoneId` (Literal["ANT","VAL","ATL","BOG","SAN","SIN"]), so it cannot
+# collide with any real zone — that property is what keeps A1 and A2's
+# per-key counters disjoint by construction.
+_GLOBAL_ZONE: str = ""
+
 # Cap for the alerts:recent list (matches RECENT_ALERTS_LENGTH in redis_keys).
 _RECENT_ALERTS_TRIM_TO = 19  # LTRIM 0 19 → 20 entries retained.
 
 
 class AlertEngine:
-    """Stateful across ticks. Maintains per-rule consecutive-breach counters.
+    """Stateful across ticks. Maintains per-(rule, zone) consecutive-breach
+    counters.
 
-    The engine's `_breaches` dict is keyed by `code` (the wire-format
-    discriminator) so adding a new rule (A3, A4, ...) just means another
-    key in the dict.
+    The engine's `_breaches` dict is keyed by `(rule_code, zone_id)`:
+      - A1 (DEMAND_GENERATION_GAP) → zone_id = `_GLOBAL_ZONE` sentinel
+        (single global counter — A1 is system-wide, not zone-scoped).
+      - A2 (LOW_RENEWABLE) → zone_id = `event.entity_id` (per-zone
+        independent lifecycle; prevents one zone's breach from emitting
+        spurious `cleared` alerts when a different zone in the same
+        publisher cycle has a non-breach M1 — see SUB-002).
 
     Lifecycle:
-      - `__init__` initializes counters at 0.
+      - `__init__` initializes an empty dict; keys are created lazily on
+        first reference (a missing key behaves the same as 0).
       - `set_fuente(...)` updates `last_fuente` so the published `Alert`
         carries the source of the tick that triggered the alert.
       - `evaluate(event, metrics)` returns ONLY NEW transitions (active OR
@@ -68,7 +82,7 @@ class AlertEngine:
     """
 
     def __init__(self, last_fuente: DataSource = DataSource.SIM) -> None:
-        self._breaches: dict[str, int] = {RULE_A1: 0, RULE_A2: 0}
+        self._breaches: dict[tuple[str, str], int] = {}
         self._last_fuente: DataSource = last_fuente
 
     def set_fuente(self, fuente: DataSource) -> None:
@@ -92,7 +106,7 @@ class AlertEngine:
                 severity=AlertSeverity.HIGH,
                 value=gap,
                 threshold=THRESHOLD_A1_DEMAND_GEN_GAP_MW,
-                zone_id=event.entity_id,
+                zone_id=_GLOBAL_ZONE,
                 timestamp=event.timestamp,
             )
         )
@@ -137,10 +151,11 @@ class AlertEngine:
         | T               | 2→3          | increment             | NO (idempotent) |
         | F (was active)  | n→0          | reset + cleared       | YES (cleared, cycles=n) |
         """
-        counter = self._breaches.get(rule, 0)
+        key = (rule, zone_id)
+        counter = self._breaches.get(key, 0)
         if condition:
             counter += 1
-            self._breaches[rule] = counter
+            self._breaches[key] = counter
             if counter >= DEBOUNCE_CYCLES and counter == DEBOUNCE_CYCLES:
                 # Exactly on transition into DEBOUNCE: publish `active`.
                 return [
@@ -170,7 +185,7 @@ class AlertEngine:
                     timestamp=timestamp,
                     consecutive_cycles=counter,
                 )
-                self._breaches[rule] = 0
+                self._breaches[key] = 0
                 return [cleared_alert]
             return []
 
@@ -186,22 +201,51 @@ class AlertEngine:
         timestamp: datetime,
         consecutive_cycles: int,
     ) -> Alert:
-        """Build a fully-populated `Alert` (new fields included)."""
-        return Alert(
-            id=str(uuid.uuid4()),
-            rule=rule,
-            code=rule,  # wire-format discriminator == rule for now
-            severity=severity,
-            zone_id=zone_id,  # type: ignore[arg-type]
-            value=value,
-            threshold=threshold,
-            state=state,  # type: ignore[arg-type]
-            consecutive_cycles=consecutive_cycles,
-            timestamp=timestamp,
-            message=(
+        """Build a fully-populated `Alert` (new fields included).
+
+        For A1 (DEMAND_GENERATION_GAP) the `zone_id` is `_GLOBAL_ZONE = ""`,
+        which is NOT a valid `ZoneId` (the Literal in `common.models` rejects
+        empty strings at validation time). We use `Alert.model_construct`
+        for A1 alerts to bypass the strict `ZoneId` Literal validation while
+        preserving `frozen=True`. A2 alerts pass through the validating
+        constructor since `event.entity_id` is a real `ZoneId`.
+
+        See spec sdd/subscriber-bugfix-2026-09/spec §Notes on deviation #2:
+        widening `Alert.zone_id` to accept the `_GLOBAL_ZONE` sentinel is
+        flagged for Day 4+ spec cleanup (not fixed in this bounded change).
+        """
+        kwargs: dict[str, object] = {
+            "id": str(uuid.uuid4()),
+            "rule": rule,
+            "code": rule,  # wire-format discriminator == rule for now
+            "severity": severity,
+            "zone_id": zone_id,
+            "value": value,
+            "threshold": threshold,
+            "state": state,
+            "consecutive_cycles": consecutive_cycles,
+            "timestamp": timestamp,
+            "message": (
                 f"{rule} {state} for zone {zone_id}: "
                 f"{value:.2f} vs threshold {threshold:.2f}"
             ),
+        }
+        if zone_id == "":
+            # Sentinel for global A1 — bypass Literal[ZoneId] validation.
+            # The wire payload carries zone_id="" per spec REQ-SUB-ALERTS-001.
+            return Alert.model_construct(**kwargs)  # type: ignore[arg-type]
+        return Alert(  # type: ignore[call-arg]
+            id=kwargs["id"],
+            rule=kwargs["rule"],
+            code=kwargs["code"],
+            severity=kwargs["severity"],  # type: ignore[arg-type]
+            zone_id=kwargs["zone_id"],  # type: ignore[arg-type]
+            value=kwargs["value"],
+            threshold=kwargs["threshold"],
+            state=kwargs["state"],  # type: ignore[arg-type]
+            consecutive_cycles=kwargs["consecutive_cycles"],
+            timestamp=kwargs["timestamp"],  # type: ignore[arg-type]
+            message=kwargs["message"],
         )
 
 

@@ -179,7 +179,7 @@ async def test_002_processor_alert_roundtrip_publishes_to_streams_and_counters(
 
     Strategy: drive `_handle_tick` directly (no consume loop) to keep the
     test focused on the alert pipeline, not on Pub/Sub ordering. We
-    pre-set `_breaches["DEMAND_GENERATION_GAP"] = 1` so the very first
+    pre-set `_breaches[("DEMAND_GENERATION_GAP", "")] = 1` so the very first
     tick transitions the counter to 2 and triggers the `active` publish.
     """
     from subscriber.alerts import RULE_A1  # noqa: F401  (FAIL pre-impl)
@@ -189,7 +189,7 @@ async def test_002_processor_alert_roundtrip_publishes_to_streams_and_counters(
     processor = EnergyProcessor(redis)
 
     # Pre-set breach counter to skip debounce cycle 1.
-    processor.alert_engine._breaches["DEMAND_GENERATION_GAP"] = 1
+    processor.alert_engine._breaches[("DEMAND_GENERATION_GAP", "")] = 1
 
     # Build an event with gap = 2000 - 1000 = 1000 > threshold (800).
     event = Event(
@@ -227,7 +227,7 @@ async def test_002_processor_alert_roundtrip_publishes_to_streams_and_counters(
     assert active == "1", f"expected active counter=1, got {active!r}"
 
     # Sanity: the breach counter advanced from 1 to 2.
-    assert processor.alert_engine._breaches["DEMAND_GENERATION_GAP"] == 2
+    assert processor.alert_engine._breaches[("DEMAND_GENERATION_GAP", "")] == 2
 
 
 # ---------------------------------------------------------------------------
