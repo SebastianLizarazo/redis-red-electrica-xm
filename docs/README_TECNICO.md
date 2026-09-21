@@ -264,6 +264,12 @@ Idempotente, formato configurable:
 - ✅ **Fase 7 (docs)** — Sebastián. Cerrada en este change `docs-day4-2026-09` (PR pendiente).
 - 🟡 **Fase 8 (entrega)** — Sebastián. Demo en vivo programado martes 22-sept-2026.
 
+## 10. Conclusiones
+
+- **Qué funcionó**: la arquitectura limpia con Protocol `DataSource` rindió — cambiar XM real ↔ simulador fue un cambio de 5 líneas en `common/config.py`, no un refactor. La separación Pub/Sub + Streams + Hashes permitió que cada estructura Redis cumpliera un rol distinto (broadcast efímero, log durable, estado agregable). La convención SHAPE-first en TDD (un test `test_001_*_shape` antes de los tests de comportamiento) atrapó 2 bugs de contrato temprano: la forma del evento `tick` en el publisher y el wire format de alertas. El fixture `fakeredis_async_client` mantuvo la suite sin Docker ni red, y el patrón R4-001 (try/except por evento con contadores separados y `continue`) resultó reusable cross-componente (publisher → subscriber → API exception handler).
+- **Qué costó más**: el drift per-zone vs global en A2 (`Alert.zone_id="SIN"` cuando correspondía zona geográfica, bug SUB-002) — un bug sutil que emergió solo en smoke E2E, no en unit tests. La spec deviation `Alert.zone_id="SIN"` (REQ-SUB-ALERTS-002) sobrevivió 3 PRs sin flagging. El lock del contrato de wire format entre publisher ↔ subscriber ↔ API llevó más iteraciones de las estimadas (el caso `fuente` real vs simulador se renegoció al menos dos veces).
+- **Con más tiempo**: un pipeline transaccional per-event con `EVAL` de Lua para atomicidad estricta (R4-007); métricas per-zona persistidas en lugar de un solo hash global (mejor observabilidad por región); tests de integración con un cluster Redis real para validar sharding y `MOVED` redirections.
+
 ---
 
 **Owner**: Sebastián · **Status**: Fase 0 cerrada · **Próxima fase**: 1
