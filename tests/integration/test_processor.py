@@ -23,12 +23,11 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from common.models import DataSource, Event, EventData, Location
-
 
 pytestmark = pytest.mark.integration
 
@@ -51,7 +50,7 @@ def _make_event(
     ts: datetime | None = None,
 ) -> Event:
     """Fabrica un Event del sistema (zone='SIN' para el global)."""
-    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
+    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
     return Event(
         entity_id=zone,  # type: ignore[arg-type]
         timestamp=ts,

@@ -15,7 +15,7 @@ Each test deliberately exercises ONE behavior so failures localize cleanly.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
@@ -27,7 +27,6 @@ from common.models import (
     EventData,
     Location,
 )
-
 
 pytestmark = pytest.mark.unit
 
@@ -51,7 +50,7 @@ def _make_event(
 ) -> Event:
     """Fabrica un Event con valores por defecto que disparan A1
     (`demanda - generacion = 1000 > 800`). Tests pueden sobrescribir."""
-    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
+    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
     return Event(
         entity_id=zona,  # type: ignore[arg-type]
         timestamp=ts,
@@ -79,7 +78,7 @@ def _make_metrics(
 ) -> dict[str, dict[str, object]]:
     """Construye el dict de métricas que `evaluate()` recibe como segundo
     argumento (forma devuelta por `subscriber.metrics.compute_metrics`)."""
-    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
+    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
     iso = ts.isoformat()
     base: dict[str, dict[str, object]] = {
         "renewable_pct": {
@@ -291,7 +290,6 @@ def test_006_alerts_malformed_isolation() -> None:
     """
     from subscriber.alerts import AlertEngine, publish_alert  # noqa: F401
 
-    redis_client = None  # placeholder; we test isolation, not the publish call
     engine = AlertEngine()
     failures = 0
 

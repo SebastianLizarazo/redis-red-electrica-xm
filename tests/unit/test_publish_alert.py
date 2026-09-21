@@ -14,10 +14,11 @@ from `tests/conftest.py` to drive it without a real Redis instance.
 from __future__ import annotations
 
 import json
+from datetime import UTC
 
 import pytest
 
-from common.models import Alert, AlertSeverity, DataSource
+from common.models import Alert, AlertSeverity
 from common.redis_keys import (
     KEY_ALERTS_TOTAL,
     KEY_RECENT_ALERTS,
@@ -26,7 +27,6 @@ from common.redis_keys import (
     alerts_active_key,
 )
 from subscriber.alerts import publish_alert  # noqa: F401  (FAIL pre-impl)
-
 
 pytestmark = pytest.mark.unit
 
@@ -38,7 +38,7 @@ pytestmark = pytest.mark.unit
 
 def _make_active_alert(code: str = "DEMAND_GENERATION_GAP") -> Alert:
     """Build a fully-populated `active` Alert (new fields included)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     return Alert(
         id="alert-pub-001",
@@ -50,14 +50,14 @@ def _make_active_alert(code: str = "DEMAND_GENERATION_GAP") -> Alert:
         threshold=800.0,
         state="active",
         consecutive_cycles=2,
-        timestamp=datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC),
         message=f"{code} active for ANT: 1000.00 vs threshold 800.00",
     )
 
 
 def _make_cleared_alert(code: str = "DEMAND_GENERATION_GAP") -> Alert:
     """Build a `cleared` Alert (same shape, state=cleared)."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     return Alert(
         id="alert-pub-002",
@@ -69,7 +69,7 @@ def _make_cleared_alert(code: str = "DEMAND_GENERATION_GAP") -> Alert:
         threshold=800.0,
         state="cleared",
         consecutive_cycles=2,
-        timestamp=datetime(2026, 9, 20, 12, 5, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 9, 20, 12, 5, 0, tzinfo=UTC),
         message=f"{code} cleared for ANT",
     )
 

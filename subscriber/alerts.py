@@ -37,7 +37,6 @@ from common.redis_keys import (
     alerts_active_key,
 )
 
-
 logger = logging.getLogger("subscriber.alerts")
 
 # Threshold constants from spec REQ-SUB-ALERTS-001 / common.config.
