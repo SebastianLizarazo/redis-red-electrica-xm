@@ -270,6 +270,17 @@ Idempotente, formato configurable:
 - **Qué costó más**: el drift per-zone vs global en A2 (`Alert.zone_id="SIN"` cuando correspondía zona geográfica, bug SUB-002) — un bug sutil que emergió solo en smoke E2E, no en unit tests. La spec deviation `Alert.zone_id="SIN"` (REQ-SUB-ALERTS-002) sobrevivió 3 PRs sin flagging. El lock del contrato de wire format entre publisher ↔ subscriber ↔ API llevó más iteraciones de las estimadas (el caso `fuente` real vs simulador se renegoció al menos dos veces).
 - **Con más tiempo**: un pipeline transaccional per-event con `EVAL` de Lua para atomicidad estricta (R4-007); métricas per-zona persistidas en lugar de un solo hash global (mejor observabilidad por región); tests de integración con un cluster Redis real para validar sharding y `MOVED` redirections.
 
+## 11. Referencias
+
+- [XM Compañía de Expertos Comerciales](https://www.xm.com.co/) — operador del SIN colombiano, fuente autoritativa de los datos del sistema eléctrico.
+- [XM Portal de datos en tiempo real](http://portalxm.xm.com.co/) — fuente de los datos vía la variable `DemandaTiempoReal`, consumida por `publisher/xm_client.py`.
+- [Redis docs](https://redis.io/docs/) — referencia de Pub/Sub, Streams, Hashes y Sorted Sets usados como bus de datos.
+- [FastAPI](https://fastapi.tiangolo.com/) — framework async del backend (`api/server.py` + routers).
+- [sse-starlette](https://github.com/sysid/sse-starlette) — Server-Sent Events para el endpoint `/api/stream`.
+- [Pydantic v2](https://docs.pydantic.dev/latest/) — validación de modelos en `common/models.py`.
+- [fakeredis-py](https://github.com/cunla/fakeredis-py) — fixture de tests sin Redis real (usado por `fakeredis_async_client`).
+- [`docs/SMOKE_TEST_subscriber.md`](docs/SMOKE_TEST_subscriber.md) — guía de smoke E2E validada en Día 2 (publisher → subscriber → Redis).
+
 ---
 
 **Owner**: Sebastián · **Status**: Fase 0 cerrada · **Próxima fase**: 1
