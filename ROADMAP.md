@@ -9,7 +9,7 @@
 | Día | Fecha | Estado | Foco |
 |-----|-------|--------|------|
 | Día 1 | Sábado 19 | ✅ cerrado | Scaffolding |
-| Día 2 | Domingo 20 | 🟡 parcial | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber core cerrado (Alejandro ✅, sdd `subscriber-core-2026-09` archivado); API/Dashboard/Infra en progreso |
+| Día 2 | Domingo 20 | ✅ cerrado | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber core cerrado (sdd `subscriber-core-2026-09` archivado, 3 PRs stacked-to-main, 112/112 verde); **smoke E2E validado** (A1 disparado con gap=4000 MW, A2 con auto-clear, 21 keys en Redis); API/Dashboard/Infra en progreso |
 | Día 3 | Lunes 21 | ⬜ | API + Frontend (conexión) |
 | Día 4 | Martes 22 | ⬜ | Integración end-to-end + docs + demo |
 
@@ -222,9 +222,14 @@ Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review line
 
 ### Bloque Integración (Días 2-4)
 
-- [ ] **T-INT-006** — Smoke test end-to-end local
-  - `make up` (Redis + publisher + subscriber + api)
-  - Verificar publisher PUBLISH → subscriber SUBSCRIBE → métricas → estado
+- [x] **T-INT-006** — Smoke test end-to-end local ✅
+  - `docker compose -f infra/docker-compose.yml up -d` (Redis) + publisher + subscriber
+  - Validado en `main @ 6414973` (post PR-B2 merge): publisher PUBLISH → subscriber SUBSCRIBE → métricas → estado ✅
+  - A1 (DEMAND_GENERATION_GAP) disparado con evento sintético de `gap=4000 MW` (2 publishes consecutivos, debounce cruzó threshold=2)
+  - A2 (LOW_RENEWABLE) emitido + auto-clear al levantar condición ✅
+  - 21 keys en Redis: `state:zone:*` (5) + `state:sin` + `metrics:*` (4) + `alerts:*` (4) + `health:*` (6) + `energy:stream`
+  - Verificado con `docs/SMOKE_TEST_subscriber.md` + script ad-hoc `smoke_publish.py` (cleanup ya hecho)
+  - **Nota**: smoke doc tiene 2 typos menores a corregir (`XM_FORCE_SOURCE` → `FORCE_SOURCE`, `docker compose` sin `-f`) — follow-up #T-DOC-005
 
 - [ ] **T-INT-007** — Validar SSE end-to-end
   - `curl -N http://localhost:8000/api/stream` y ver eventos llegando
@@ -306,6 +311,11 @@ Documentados en `engram:sdd/publisher-hardening-2026-09/archive-report` (obs #48
 - `common/logging_config.py` imprime la hora con doble Z (`%(asctime)sZ` + `formatTime` retorna `+ "Z"`)
 - `common/config.py:125` falla mypy
 
+### Subscriber core (`subscriber-core-2026-09` archived, main @ 6414973)
+- **SUB-001 WARNING** — `subscriber/processor.py:_failures` es **in-memory**; spec pedía 3 keys Redis INCR separadas (`health:subscriber:failures`, `health:subscriber:malformed`, `health:subscriber:handler_failures`) para dashboard visibility. **Functional contract preservado** (counter + degrade + continue + ERROR log en threshold=3). DEFERRED — opcional pre-Day-4, baja prioridad.
+- **SUB-002 SUGGESTION** — Patrón de `LOW_RENEWABLE cleared` repetido cada 5s con `zone_id="VAL"` y `value=79.5` (NO es breach, threshold=30). Detectado en smoke E2E. Hipótesis: `cleared` usa `zone_id=event.entity_id` del evento ACTUAL no-breach (no del evento original que tuvo breach) Y/O el counter global sube con 1 zona pero se cleared con las otras 5 dentro del mismo ciclo (race entre eventos de 6 zonas en 1 ciclo). `alerts:total` se infló de 0 → 161 en ~10 min por este patrón. **Investigar en próxima sesión** antes de Day 4 (puede confundir al profe si ve 160+ alerts).
+- **T-DOC-005** — Corregir typos en `docs/SMOKE_TEST_subscriber.md`: `$env:XM_FORCE_SOURCE` → `$env:FORCE_SOURCE` (línea 21), `docker compose up -d redis` → `make up` o `docker compose -f infra/docker-compose.yml up -d` (línea 10).
+
 ### Documentación
 - **T-DOC-001** — Disclaimer "es un modelo, no un dato medido" YA está en `publisher/normalizer.py` docstring; falta elevarlo al `docs/README_TECNICO.md` para que el profesor lo vea
 
@@ -365,4 +375,20 @@ Antes de entregar, validar:
 
 ---
 
-**Owner del roadmap**: Sebastián · **Próxima actualización**: cierre de Día 3
+**Owner del roadmap**: Sebastián (+ AI orchestrator para planning/integración) · **Próxima actualización**: cierre de Día 3
+
+---
+
+## Próxima sesión — prioridades (Día 3)
+
+**Día 3 - Lunes 21 sept** — orden sugerido:
+
+1. **T-API-001..008** — FastAPI app + 6 routers (state, metrics, alerts, stream, health, stress) + tests con `httpx` TestClient. Sin asignar formalmente al equipo; Sebastián + orch pueden arrancarlo.
+   - Prereq: el subscriber core ya está en `main`, las keys Redis están estables, los modelos Pydantic listos.
+2. **SUB-002** — Investigar y arreglar el bug de `LOW_RENEWABLE cleared` repetido para `zone_id=VAL`. Probable fix en `subscriber/alerts.py:_evaluate_rule` (separar `_cleared_emitted_this_cycle` flag por rule-code, o emitir cleared solo en el evento donde counter pasa de >0 a 0).
+3. **SUB-001** (opcional) — Migrar `_failures` in-memory a 3 keys Redis INCR separadas para dashboard visibility. Bajo riesgo, alta visibilidad.
+
+**Contexto completo en Engram** (para retomar la próxima sesión sin perder contexto):
+- `sdd/subscriber-core-2026-09/{proposal,spec,design,tasks,apply-progress,verify-report,archive-report}` — change cerrado
+- `sdd/publisher-hardening-2026-09/...` — bounded correction Publisher cerrada
+- `architecture/subscriber-isolation` — patrón R4-001 reusable cross-change
