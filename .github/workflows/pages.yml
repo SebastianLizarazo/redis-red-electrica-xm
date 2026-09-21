@@ -1,0 +1,82 @@
+# Deploy del dashboard a GitHub Pages (T-INFRA-013).
+#
+# Publica `dashboard/dist/` en Pages. El build usa
+# `base: '/redis-red-electrica-xm/'` (ver dashboard/vite.config.js) porque
+# Pages sirve el sitio bajo la ruta del repositorio, no en la raíz del
+# dominio.
+#
+# IMPORTANTE — el sitio publicado es solo el frontend. GitHub Pages sirve
+# archivos estáticos: no puede alojar la API ni Redis. Para que el
+# dashboard muestre datos hay que apuntarlo a un backend accesible desde
+# internet con la variable `VITE_API_URL` (por ejemplo el tunnel de
+# cloudflared del Plan B en docs/DEPLOY.md). Sin eso, la página carga pero
+# se queda en "SIN CONEXIÓN".
+#
+# Antes del primer run: Settings → Pages → Source = GitHub Actions.
+
+name: Deploy dashboard a Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dashboard/**"
+      - ".github/workflows/pages.yml"
+  # Permite lanzarlo a mano desde la pestaña Actions, útil para republicar
+  # con otra VITE_API_URL sin tener que tocar el código.
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: "URL pública del backend (deja vacío para usar rutas relativas)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Un solo deploy a la vez; no cancelamos el que está en vuelo para no dejar
+# el sitio a medio publicar.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        env:
+          VITE_API_URL: ${{ github.event.inputs.api_url || vars.DASHBOARD_API_URL || '' }}
+        run: pnpm --filter dashboard build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

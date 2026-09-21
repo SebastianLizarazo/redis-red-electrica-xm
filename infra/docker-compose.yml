@@ -1,9 +1,17 @@
-# Docker Compose base para redis-red-electrica-xm.
+# Docker Compose de redis-red-electrica-xm (T-INFRA-011).
 #
-# Esta Fase 0 solo levanta Redis. Los servicios publisher/subscriber/api
-# se agregan en Fases 1-2 vía `infra/Dockerfile.*` separados.
-# El nombre de la red es fijo (`red-electrica-net`) para que los
-# contenedores posteriores se conecten con `redis:6379` como hostname.
+# Levanta el pipeline completo: Redis + publisher + subscriber + API.
+#
+#   docker compose -f infra/docker-compose.yml up -d
+#
+# El dashboard NO se incluye por defecto. Vive en el perfil `dev` porque
+# durante el desarrollo se corre con `pnpm dev` fuera de Docker (HMR
+# instantáneo), y para la demo se sirve como build estático:
+#
+#   docker compose -f infra/docker-compose.yml --profile dev up -d
+#
+# El contexto de build es la raíz del repo (`..`), no `infra/`, porque los
+# Dockerfiles copian `common/`, `publisher/`, etc. desde la raíz.
 
 services:
   redis:
@@ -20,11 +28,112 @@ services:
       retries: 5
       start_period: 5s
     restart: unless-stopped
+    volumes:
+      - redis-data:/data
     logging:
       driver: json-file
       options:
         max-size: "10m"
         max-file: "3"
+
+  publisher:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.publisher
+    container_name: publisher-red-electrica
+    environment:
+      # Dentro de la red de compose el hostname es el nombre del servicio.
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-0}
+      # Vacío = automático (XM real, con fallback a simulador tras 3 fallos).
+      # Para una demo sin internet: FORCE_SOURCE=simulator
+      FORCE_SOURCE: ${FORCE_SOURCE:-}
+      PUBLISHER_INTERVAL_SECONDS: ${PUBLISHER_INTERVAL_SECONDS:-5}
+      PUBLISHER_INTERVAL_SECONDS_REAL: ${PUBLISHER_INTERVAL_SECONDS_REAL:-300}
+    depends_on:
+      redis:
+        # Sin `service_healthy` el publisher arranca antes que Redis acepte
+        # conexiones y muere en el primer ping.
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  subscriber:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.subscriber
+    container_name: subscriber-red-electrica
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-0}
+      DEMAND_GENERATION_GAP_THRESHOLD: ${DEMAND_GENERATION_GAP_THRESHOLD:-800.0}
+      RENEWABLE_THRESHOLD: ${RENEWABLE_THRESHOLD:-30.0}
+      ALERT_DEBOUNCE_CYCLES: ${ALERT_DEBOUNCE_CYCLES:-2}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.api
+    container_name: api-red-electrica
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_JSON: ${LOG_JSON:-0}
+      # Origins del dashboard: Vite en dev y el sitio de GH Pages.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Dashboard en modo desarrollo. Opcional: solo arranca con `--profile dev`.
+  # Monta el código fuente para conservar el hot-reload de Vite; el
+  # `node_modules` va en un volumen anónimo para que el del host (que puede
+  # tener binarios de otra plataforma) no pise el del contenedor.
+  dashboard-dev:
+    profiles: ["dev"]
+    image: node:22-alpine
+    container_name: dashboard-red-electrica
+    working_dir: /app
+    command: sh -c "corepack enable && pnpm install && pnpm dev --host 0.0.0.0"
+    ports:
+      - "5173:5173"
+    environment:
+      # Dentro de Docker el backend no es localhost, es el servicio `api`.
+      VITE_PROXY_TARGET: http://api:8000
+    volumes:
+      - ../dashboard:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  redis-data:
 
 networks:
   default:

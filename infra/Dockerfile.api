@@ -1,0 +1,42 @@
+# Imagen de la API FastAPI + SSE (T-INFRA-010).
+#
+# Esta imagen copia los CUATRO paquetes, no solo `api/` y `common/`, porque
+# la API importa de los otros dos para no duplicar constantes:
+#
+#   api/routers/stress.py  →  publisher.simulator.STRESS_EVENTS
+#   api/routers/alerts.py  →  subscriber.alerts.RULE_A1 / RULE_A2
+#
+# Es deliberado: mantiene una sola fuente de verdad del wire format. El
+# precio es que la imagen de la API se reconstruye cuando cambia cualquiera
+# de los otros componentes.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+COPY pyproject.toml README.md ./
+COPY common/ ./common/
+COPY publisher/ ./publisher/
+COPY subscriber/ ./subscriber/
+COPY api/ ./api/
+
+RUN pip install --no-cache-dir .
+
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+USER app
+
+EXPOSE 8000
+
+# Aquí el healthcheck sí es significativo: `/api/health` hace un ping real a
+# Redis antes de responder, así que un 200 implica que la API responde Y que
+# su dependencia está viva.
+# Lee API_PORT en vez de fijar 8000: si alguien reasigna el puerto por env,
+# un healthcheck hardcodeado marcaría el contenedor como unhealthy sin que
+# nada esté realmente mal.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import os,urllib.request as u; u.urlopen(f\"http://localhost:{os.environ.get('API_PORT','8000')}/api/health\", timeout=4).read()"
+
+CMD ["python", "-m", "api.server"]

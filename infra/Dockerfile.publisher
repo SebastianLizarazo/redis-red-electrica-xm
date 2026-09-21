@@ -1,0 +1,37 @@
+# Imagen del Publisher (T-INFRA-008).
+#
+# Solo necesita `common/` además de su propio paquete: `publisher/` no
+# importa nada de `subscriber/` ni de `api/`. Copiar únicamente lo que usa
+# mantiene la imagen chica y hace que un cambio en el dashboard o en la API
+# no invalide esta capa de caché.
+FROM python:3.12-slim
+
+# PYTHONUNBUFFERED: sin esto los logs se quedan en el buffer y `docker logs`
+# no muestra nada hasta que el proceso muere — justo cuando más se necesitan.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# Las dependencias se resuelven desde pyproject.toml, que declara `readme`,
+# así que README.md tiene que existir o `pip install .` falla.
+COPY pyproject.toml README.md ./
+COPY common/ ./common/
+COPY publisher/ ./publisher/
+
+RUN pip install --no-cache-dir .
+
+# Usuario sin privilegios: el publisher solo hace peticiones HTTP salientes
+# y escribe en Redis, no necesita root para nada.
+RUN useradd --create-home --uid 1000 app && chown -R app:app /app
+USER app
+
+# El healthcheck comprueba que el proceso todavía alcanza Redis, que es el
+# modo de fallo habitual (Redis caído o partición de red). NO detecta un
+# bucle colgado: para eso haría falta comparar el timestamp de `state:sin`
+# contra el reloj, y eso vive mejor en el dashboard que en un HEALTHCHECK.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import os,redis; redis.Redis.from_url(os.environ['REDIS_URL']).ping()"
+
+CMD ["python", "-m", "publisher.main"]

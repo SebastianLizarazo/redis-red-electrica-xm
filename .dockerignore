@@ -1,0 +1,42 @@
+# Lo que NO debe entrar al contexto de build de Docker.
+#
+# Sin esto, `docker build` sube el .venv y los node_modules al daemon en
+# cada build: cientos de MB y varios segundos perdidos por imagen.
+
+.git/
+.github/
+
+# Entornos y dependencias
+.venv/
+venv/
+env/
+node_modules/
+**/node_modules/
+*.egg-info/
+
+# Caches
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+
+# Frontend: el dashboard no se sirve desde estas imágenes
+dashboard/dist/
+dashboard/.vite/
+
+# Nada de esto se usa en runtime
+tests/
+docs/
+infra/
+Makefile
+*.md
+!README.md
+
+# Secretos locales: el `.env` real NUNCA va dentro de una imagen.
+.env
+.env.*
+!.env.example
