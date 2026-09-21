@@ -85,6 +85,10 @@ KEY_HEALTH_UPTIME = "health:uptime"
 KEY_HEALTH_SOURCE_SWITCHES = "health:source_switches"
 KEY_HEALTH_NEXT_RETRY_AT = "health:next_retry_at"
 
+# Salud específica del subscriber (PR-B2): set en boot, sobrevive a SIGTERM.
+KEY_HEALTH_SUBSCRIBER_UPTIME = "health:subscriber:uptime"
+KEY_HEALTH_SUBSCRIBER_STARTED_AT = "health:subscriber:started_at"
+
 # Banderas de stress test inyectables por la API (TTL corto).
 KEY_STRESS_PREFIX = "stress:"
 KEY_STRESS_TTL_SECONDS = 30
@@ -186,6 +190,8 @@ __all__ = [
     "KEY_HEALTH_UPTIME",
     "KEY_HEALTH_SOURCE_SWITCHES",
     "KEY_HEALTH_NEXT_RETRY_AT",
+    "KEY_HEALTH_SUBSCRIBER_UPTIME",
+    "KEY_HEALTH_SUBSCRIBER_STARTED_AT",
     "KEY_STRESS_PREFIX",
     "KEY_STRESS_TTL_SECONDS",
     # TTLs y ventanas
