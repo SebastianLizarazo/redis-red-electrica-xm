@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 
-from api.routers import health, state
+from api.routers import alerts, health, metrics, state
 from common.config import settings
 from common.logging_config import get_logger
 
@@ -112,10 +112,14 @@ def create_app() -> FastAPI:
             headers={"Retry-After": "5"},
         )
 
-    # Routers (PR-A solo incluye state + health; stress, metrics, alerts,
-    # stream se añadirán en PR-B/PR-C).
+    # Routers (PR-A + PR-B). PR-C añadirá stream.
+    # - state/health: read-only, GET (PR-A)
+    # - metrics/alerts: read-only, GET (PR-B)
+    # - stress: WRITE-only, POST (PR-B) — único endpoint de escritura del API
     app.include_router(state.router)
     app.include_router(health.router)
+    app.include_router(metrics.router)
+    app.include_router(alerts.router)
 
     return app
 

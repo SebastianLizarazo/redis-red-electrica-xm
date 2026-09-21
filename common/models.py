@@ -128,12 +128,24 @@ class ZoneState(BaseModel):
 
 
 class Metric(BaseModel):
-    """Métrica derivada univariada. `zone_id=None` = global (SIN)."""
+    """Métrica derivada univariada. `zone_id=None` = global (SIN).
+
+    `value` admite `None` para representar el caso M3 sin histórico:
+    el subscriber (subscriber/metrics.py:persist_metrics) escribe el literal
+    `"NaN"` en el hash cuando `compute_metrics.m3` es `None`. La API
+    coacciona esa cadena a `None` antes de pasar a Pydantic para que el
+    JSON serialice como `null` (REQ-API-003 scenario 2, design #511 §6).
+
+    No es `Optional[float]` con default `None`: el campo sigue siendo
+    obligatorio (los 3 metrics siempre se publican), solo que su valor
+    puede ser `None` cuando no hay histórico. `Alert.value` y otros
+    campos numéricos siguen siendo `float` estricto (no aplica este caso).
+    """
 
     model_config = ConfigDict(frozen=True)
 
     name: str = Field(..., min_length=1, max_length=64)
-    value: float
+    value: float | None  # None → JSON `null` (M3 sin histórico).
     unit: str = Field(..., min_length=1, max_length=16)
     timestamp: AwareDatetime
     zone_id: ZoneId | None = None
