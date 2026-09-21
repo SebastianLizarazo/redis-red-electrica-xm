@@ -124,22 +124,28 @@ DÍA 4 (martes 22) ──► integración final + entrega
 
 - [x] **T-API-002** — `api/routers/state.py` — `GET /api/state` → estado actual por zona ✅ **PR-A merged**
   - Devuelve `{sin: ZoneState, zones: list[ZoneState]}` (5 zonas geográficas)
-- [ ] **T-API-003** — `api/routers/metrics.py` — `GET /api/metrics` → M1/M2/M3 actuales ⬜ PR-B
-- [ ] **T-API-004** — `api/routers/alerts.py` — `GET /api/alerts` → alertas recientes (lista) + activas (hash) ⬜ PR-B
-- [ ] **T-API-005** — `api/routers/stream.py` — `GET /api/stream` (SSE) ⬜ PR-C
+- [x] **T-API-003** — `api/routers/metrics.py` — `GET /api/metrics` → M1/M2/M3 actuales ✅ **PR-B merged in PR #9** (commit `43c6020`)
+  - Coerciona `"NaN"` → `null` (REQ-API-003); pipeline HGETALL×3 en 1 round-trip
+  - Deviation: `Metric.value` extendido a `float | None` (back-compat safe)
+- [x] **T-API-004** — `api/routers/alerts.py` — `GET /api/alerts` → alertas recientes (lista) + activas (hash) ✅ **PR-B merged in PR #9** (commit `43c6020`)
+  - Dual-source: LRANGE `alerts:recent` (IDs) + XREVRANGE `alerts:stream` (payloads)
+  - Deviation: subscriber/alerts.py:251 LPUShea solo `alert.id`, no payload completo
+- [x] **T-API-005** — `api/routers/stream.py` — `GET /api/stream` (SSE) ✅ **PR-C merged in PR #10** (commit `08eafb1`)
   - Emite eventos `tick`, `alert`, `source_switch` en formato SSE
   - Heartbeat cada 15s para mantener conexión
+  - Per-conn `pubsub.subscribe(PUBSUB_CHANNEL_ENERGY)` + `try/finally: unsubscribe + aclose` (R1/R5 leak prevention)
 - [x] **T-API-006** — `api/routers/health.py` — `GET /api/health` → `HealthStatus` ✅ **PR-A merged**
   - Deriva `uptime_seconds` desde `health:subscriber:started_at`; `redis_ok` desde inline ping
   - Deviation: `HealthStatus` extendido con `failures`, `source_switches`, `last_failure`, `next_retry_at` (alineado con REQ-API-005 del spec)
-- [ ] **T-API-007** — `api/routers/stress.py` — `POST /api/stress/{event}` ⬜ PR-B
+- [x] **T-API-007** — `api/routers/stress.py` — `POST /api/stress/{event}` ✅ **PR-B merged in PR #9** (commit `b540f8e`)
   - Inyecta evento anómalo (demand_surge / hydro_drop / critical_deficit / recovery)
-- [ ] **T-API-008** — Tests de los routers con `httpx` TestClient 🟡 parcial
+  - Valida contra `STRESS_EVENTS` (single source of truth: `publisher.simulator`); 400 con detail espejando el `ValueError` del publisher
+- [x] **T-API-008** — Tests de los routers con `httpx` TestClient ✅ **16 tests verde (PR-A 8 + PR-B 6 + PR-C 2)**
   - ✅ PR-A: `test_state_router.py` (4 tests, incluye CORS preflight) + `test_health_router.py` (4 tests, incluye redis recovery)
-  - ⬜ PR-B: tests para metrics + alerts + stress routers
-  - ⬜ PR-C: tests para stream router
+  - ✅ PR-B: `test_metrics_router.py` (2) + `test_alerts_router.py` (2, end-to-end via `publish_alert`) + `test_stress_router.py` (2, valid 204 + invalid 400)
+  - ✅ PR-C: `test_stream_router.py` (2, custom `FastASGITransport` workaround para `httpx + sse-starlette` task-group deadlock + `AppStatus.should_exit_event` autouse reset)
 
-**PR-A totals**: 120/120 tests verde (era 112 + 8 nuevos), sdd-verify PASS WITH WARNINGS, 0 regresiones, 0 nuevos errores ruff/mypy. Artefactos SDD en engram: `sdd/api-core-2026-09/{explore,proposal,spec,design,tasks,apply-progress,verify-report}`.
+**Chain totals**: 128/128 tests verde (112 baseline + 16 nuevos: 8 PR-A + 6 PR-B + 2 PR-C), sdd-verify PR-A PASS WITH WARNINGS / PR-B PASS / PR-C PASS, 0 regresiones, 0 nuevos errores ruff/mypy. **REQ-API-001..008 satisfechas (8/8)**. ✅ done — **PR #9 (PR-A+PR-B) + PR #10 (PR-C)**, main @ `99c7230`. Artefactos SDD en engram: `sdd/api-core-2026-09/{explore,proposal,spec,design,tasks,apply-progress,verify-report,archive-report}`. Surgical edits: `cors_origins` en `common/config.py`, `state_sin_key()` factory en `common/redis_keys.py`, `app_client` fixture en `tests/conftest.py`, `HealthStatus` extension (PR-A) + `Metric.value: float | None` (PR-B) en `common/models.py`.
 
 ---
 
