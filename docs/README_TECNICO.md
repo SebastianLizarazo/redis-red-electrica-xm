@@ -6,6 +6,8 @@
 
 ## 1. ¿Qué es?
 
+> **Disclaimer**: Es un modelo, no un dato medido. La magnitud del sistema sí es real cuando la fuente es XM; el reparto por zonas y el despacho de generación son una simplificación documentada del design. Para datos auditables consultar XM directamente.
+
 Monitor en tiempo real del Sistema Interconectado Nacional (SIN) colombiano
 que usa [Redis](https://redis.io) como bus de datos principal. El sistema
 consume la API pública de [XM](https://www.xm.com.co/) (operador del SIN),
@@ -251,26 +253,43 @@ Idempotente, formato configurable:
   `state:zone:SIN` que NO es lo correcto (la key global es
   `state:sin`). El caller decide; documentado.
 
-## 9. Próximos pasos (Fase 1+)
+## 9. Estado de las fases
 
-- **Fase 1 (publisher)**: implementar `XMRealSource`, `SimulatorSource`,
-  `normalizer`, `source_selector` en `publisher/`. Publicar en
-  `energy-events` (Pub/Sub) + `energy:stream` (Stream) +
-  `state:zone:*` (Hashes).
-- **Fase 2 (subscriber)**: processar eventos, calcular M1/M2/M3,
-  evaluar A1/A2 con debounce, housekeeping 60s.
-- **Fase 3 (api)**: FastAPI + SSE con `/api/health`, `/api/state`,
-  `/api/stream`, `/api/stress/{event}`.
-- **Fase 4 (dashboard inicial)**: SSE consumer + primer KPI card
-  funcionando end-to-end con simulador.
-- **Fase 5 (infra completa)**: Dockerfiles publisher/subscriber/api +
-  healthchecks extendidos.
-- **Fase 6 (dashboard completo)**: 4 KPIs, 2 charts, mapa, panel
-  alertas, banner modo, 4 botones stress test.
-- **Fase 7 (docs)**: DEPLOY.md, TESTING.md, INTEGRANTES.md; video de
-  respaldo.
-- **Fase 8 (entrega)**: build de Vite, GH Pages (frontend), demo local
-  (backend) con plan B de `cloudflared`.
+- ✅ **Fase 1 (publisher)** — Edwar. Cerrada 2026-09-20 (PR #2 `76516a3`).
+- ✅ **Fase 2 (subscriber)** — Alejandro. Cerrada 2026-09-20/21 (PRs #6/#7/#8, `9040033`+`c996c33`+`6414973`).
+- ✅ **Fase 3 (api)** — Sebastián. Cerrada 2026-09-21 (PRs #9/#10, `2a5389a`+`99c7230`).
+- ✅ **Fase 4 (dashboard inicial)** — David. En curso (scaffolding listo, componentes T-DASH-001..010 pending).
+- 🟡 **Fase 5 (infra completa)** — Jonathan. Parcial: solo Redis dockerizado; publisher/subscriber/api pendientes (T-INFRA-008..013).
+- 🟡 **Fase 6 (dashboard completo)** — David. En curso (depende de Fase 4).
+- ✅ **Fase 7 (docs)** — Sebastián. Cerrada en este change `docs-day4-2026-09` (PR pendiente).
+- 🟡 **Fase 8 (entrega)** — Sebastián. Demo en vivo programado martes 22-sept-2026.
+
+## 10. Conclusiones
+
+- **Qué funcionó**: la arquitectura limpia con Protocol `DataSource` rindió — cambiar XM real ↔ simulador fue un cambio de 5 líneas en `common/config.py`, no un refactor. La separación Pub/Sub + Streams + Hashes permitió que cada estructura Redis cumpliera un rol distinto (broadcast efímero, log durable, estado agregable). La convención SHAPE-first en TDD (un test `test_001_*_shape` antes de los tests de comportamiento) atrapó 2 bugs de contrato temprano: la forma del evento `tick` en el publisher y el wire format de alertas. El fixture `fakeredis_async_client` mantuvo la suite sin Docker ni red, y el patrón R4-001 (try/except por evento con contadores separados y `continue`) resultó reusable cross-componente (publisher → subscriber → API exception handler).
+- **Qué costó más**: el drift per-zone vs global en A2 (`Alert.zone_id="SIN"` cuando correspondía zona geográfica, bug SUB-002) — un bug sutil que emergió solo en smoke E2E, no en unit tests. La spec deviation `Alert.zone_id="SIN"` (REQ-SUB-ALERTS-002) sobrevivió 3 PRs sin flagging. El lock del contrato de wire format entre publisher ↔ subscriber ↔ API llevó más iteraciones de las estimadas (el caso `fuente` real vs simulador se renegoció al menos dos veces).
+- **Con más tiempo**: un pipeline transaccional per-event con `EVAL` de Lua para atomicidad estricta (R4-007); métricas per-zona persistidas en lugar de un solo hash global (mejor observabilidad por región); tests de integración con un cluster Redis real para validar sharding y `MOVED` redirections.
+
+## 11. Referencias
+
+- [XM Compañía de Expertos Comerciales](https://www.xm.com.co/) — operador del SIN colombiano, fuente autoritativa de los datos del sistema eléctrico.
+- [XM Portal de datos en tiempo real](http://portalxm.xm.com.co/) — fuente de los datos vía la variable `DemandaTiempoReal`, consumida por `publisher/xm_client.py`.
+- [Redis docs](https://redis.io/docs/) — referencia de Pub/Sub, Streams, Hashes y Sorted Sets usados como bus de datos.
+- [FastAPI](https://fastapi.tiangolo.com/) — framework async del backend (`api/server.py` + routers).
+- [sse-starlette](https://github.com/sysid/sse-starlette) — Server-Sent Events para el endpoint `/api/stream`.
+- [Pydantic v2](https://docs.pydantic.dev/latest/) — validación de modelos en `common/models.py`.
+- [fakeredis-py](https://github.com/cunla/fakeredis-py) — fixture de tests sin Redis real (usado por `fakeredis_async_client`).
+- [`docs/SMOKE_TEST_subscriber.md`](docs/SMOKE_TEST_subscriber.md) — guía de smoke E2E validada en Día 2 (publisher → subscriber → Redis).
+
+## 12. Lecciones aprendidas
+
+- **Arquitectura**: el Protocol `DataSource` rindió — switching XM ↔ simulador fue un cambio de 5 líneas en `common/config.py`, no un refactor. La lección: tipar las dependencias externas como protocolos `runtime_checkable` paga el costo del typing en DX y testabilidad.
+- **TDD**: la convención SHAPE-first (un test `test_001_*_shape` antes de los tests de comportamiento) forzó diseñar la forma de los datos antes del comportamiento. Atrapó 2 bugs de contrato temprano: el wire format del publisher (R3-001) y la forma de la `Alert` antes de calcular reglas.
+- **Resiliencia**: el patrón R4-001 (try/except por evento con contadores separados y `continue`) fue reusable cross-componente — apareció igual en publisher (`publisher/main.py`), subscriber (`subscriber/processor.py`) y API exception handler. Codificar la resiliencia como patrón replicable vale la pena; copiar el `except` específico no.
+- **Discovery**: bugs sutiles estilo "race" (SUB-002) vienen de **inconsistencias semánticas** (contador global + métrica per-zona con lógicas distintas), no de concurrencia. Lección: auditar el grafo de flujo de datos, no solo los locks. El test E2E de smoke fue lo único que expuso el drift.
+- **DevEx**: los shortcuts `make up` / `make test` / `make lint` / `make ci` dejaron a cada contribuidor productivo en sus primeros 10 minutos. Vale la pena invertir el primer día en esto; el retorno aparece cuando hay 5 personas tocando el repo en paralelo.
+- **Spec drift**: una deviation (`Alert.zone_id="SIN"` cuando correspondía zona geográfica, REQ-SUB-ALERTS-002) sobrevivió 3 PRs antes de flagearse. Lección: agregar un "spec adherence check" explícito al checklist de `sdd-verify` para la próxima iteración — leer la spec como parte del review, no solo el diff de código.
+- **Documentación como código**: tener el spec en engram (`sdd/{change}/spec`) y el código en disco, cerrando ambos en un único PR, evitó que spec y código se desincronicen. La doc de Fase 0 que se escribió junto al código inicial sigue vigente tres días después sin necesidad de rework.
 
 ---
 
