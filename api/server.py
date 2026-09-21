@@ -28,7 +28,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 
-from api.routers import alerts, health, metrics, state
+from api.routers import alerts, health, metrics, state, stress
 from common.config import settings
 from common.logging_config import get_logger
 
@@ -120,6 +120,7 @@ def create_app() -> FastAPI:
     app.include_router(health.router)
     app.include_router(metrics.router)
     app.include_router(alerts.router)
+    app.include_router(stress.router)
 
     return app
 
