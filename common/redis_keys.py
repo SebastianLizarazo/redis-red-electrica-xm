@@ -127,6 +127,15 @@ def state_zone_key(zone_id: ZoneId) -> str:
     return KEY_STATE_ZONE.format(zone_id=zone_id)
 
 
+def state_sin_key() -> str:
+    """Hash global del SIN (agregador). Devuelve `state:sin`.
+
+    Existe por simetría con `state_zone_key` para que el código del API
+    no tenha que hardcodear la cadena en cada router.
+    """
+    return KEY_STATE_SIN
+
+
 def demand_history_member(zone_id: ZoneId) -> str:
     """Miembro del Sorted Set de histórico cuando se quiere discriminar
     por zona (no usado en la implementación base porque el ranking es
@@ -201,6 +210,7 @@ __all__ = [
     "DEFAULT_BACKOFF_CAP_SECONDS",
     # Factories
     "state_zone_key",
+    "state_sin_key",
     "demand_history_member",
     "recent_alerts_key",
     "alerts_active_key",

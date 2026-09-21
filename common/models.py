@@ -175,6 +175,18 @@ class HealthStatus(BaseModel):
     """
     Estado agregado del pipeline. El dashboard lo pinta como banner + KPIs
     de freshness; el operador lo lee para saber si XM está respondiendo.
+
+    Campos (alineados con REQ-API-005 del spec #510):
+    - `mode`: fuente comprometida (REAL/SIM).
+    - `failures`: contador de fallos consecutivos de XM (Redis: `health:failures`).
+    - `source_switches`: nº de conmutaciones REAL↔SIM (Redis: `health:source_switches`).
+    - `last_xm_success`, `last_failure`, `next_retry_at`: opcionales (None si ausentes).
+    - `uptime_seconds`: derivado de `health:subscriber:started_at` (0 si ausente).
+    - `redis_ok`: resultado del inline `await redis.ping()` del handler.
+
+    Los nuevos campos tienen default, así que `frozen=True` se preserva y
+    ningún call site existente se rompe (HealthStatus no se construye fuera
+    de los routers del API todavía).
     """
 
     model_config = ConfigDict(frozen=True)
@@ -185,17 +197,20 @@ class HealthStatus(BaseModel):
     # nunca respondió, `last_xm_success` es None; no necesitamos validar
     # zona horaria sobre None. Cuando llegue un valor real, sí exigimos
     # aware en el validador de abajo.
-    consecutive_failures: int = Field(..., ge=0)
+    failures: int = Field(..., ge=0)
+    source_switches: int = Field(..., ge=0)
+    last_failure: datetime | None = None
+    next_retry_at: datetime | None = None
     redis_ok: bool
     uptime_seconds: int = Field(..., ge=0)
 
-    @field_validator("last_xm_success", mode="after")
+    @field_validator("last_xm_success", "last_failure", "next_retry_at", mode="after")
     @classmethod
     def _ensure_aware_when_present(cls, v: datetime | None) -> datetime | None:
         if v is None:
             return v
         if v.tzinfo is None or v.tzinfo.utcoffset(v) is None:
-            raise ValueError("last_xm_success must be timezone-aware (UTC)")
+            raise ValueError("datetime fields must be timezone-aware (UTC) when present")
         return v
 
 
