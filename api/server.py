@@ -9,8 +9,9 @@ Diseño (spec #510, design #511):
 - `CORSMiddleware` lee `settings.cors_origins` (env `CORS_ORIGINS`).
 - `@app.exception_handler(RedisError)` → `503` + `Retry-After: 5`. Cubre
   cualquier router cuya lectura Redis falle (REQ-API-008).
-- Routers incluidos: `state` y `health` (PR-A). PR-B añadirá metrics/alerts/stress;
-  PR-C añadirá stream. Dejamos los include_router para los routers ya existentes.
+- Routers incluidos: `state`, `health` (PR-A), `metrics`, `alerts`, `stress`
+  (PR-B), y `stream` (PR-C, SSE pubsub per-conn + heartbeat 15s).
+  Dejamos los include_router para los routers ya existentes.
 
 Por qué un factory y no un módulo-nivel `app = FastAPI()`:
 - El módulo-nivel se evalúa una sola vez al import; los `dependency_overrides`
@@ -28,7 +29,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from redis.exceptions import RedisError
 
-from api.routers import alerts, health, metrics, state, stress
+from api.routers import alerts, health, metrics, state, stream, stress
 from common.config import settings
 from common.logging_config import get_logger
 
@@ -112,15 +113,17 @@ def create_app() -> FastAPI:
             headers={"Retry-After": "5"},
         )
 
-    # Routers (PR-A + PR-B). PR-C añadirá stream.
+    # Routers (PR-A + PR-B + PR-C).
     # - state/health: read-only, GET (PR-A)
     # - metrics/alerts: read-only, GET (PR-B)
     # - stress: WRITE-only, POST (PR-B) — único endpoint de escritura del API
+    # - stream: SSE, GET (PR-C) — pubsub per-conn + heartbeat 15s (REQ-API-007)
     app.include_router(state.router)
     app.include_router(health.router)
     app.include_router(metrics.router)
     app.include_router(alerts.router)
     app.include_router(stress.router)
+    app.include_router(stream.router)
 
     return app
 
