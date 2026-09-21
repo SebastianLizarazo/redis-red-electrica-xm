@@ -10,7 +10,7 @@
 |-----|-------|--------|------|
 | Día 1 | Sábado 19 | ✅ cerrado | Scaffolding |
 | Día 2 | Domingo 20 | ✅ cerrado | Publisher cerrado (Edwar ✅ + bounded correction ✅); Subscriber core cerrado (sdd `subscriber-core-2026-09` archivado, 3 PRs stacked-to-main, 112/112 verde); **smoke E2E validado** (A1 disparado con gap=4000 MW, A2 con auto-clear, 21 keys en Redis); API/Dashboard/Infra en progreso |
-| Día 3 | Lunes 21 | 🟡 en progreso | API PR-A done (server + state + health + 120 tests verde, main @ `69636cb`); PR-B (metrics + alerts + stress) + PR-C (SSE) pending |
+| Día 3 | Lunes 21 | ✅ cerrado | API cerrado (`api-core-2026-09` archivado — server + state + health + metrics + alerts + stress + stream SSE, 128/128 tests verde, PRs #9+#10 stacked-to-main @ `99c7230`); SUB-002 fixed (per-zone breach state, PR #11); docs-day4 cerrado (README + DEPLOY + TESTING + ROADMAP, PR #12); main @ `706f51e` |
 | Día 4 | Martes 22 | ⬜ | Integración end-to-end + docs + demo |
 
 ## Orden sugerido de ejecución
@@ -306,9 +306,9 @@ Post-merge override de PR #2 Publisher — 5 CRITICAL del 4R bounded review line
 
 ---
 
-## Follow-ups diferidos (no bloquean Día 2; revisar antes de Día 4)
+## Follow-ups diferidos (no bloquean Día 4; revisar post-entrega o nunca)
 
-Documentados en `engram:sdd/publisher-hardening-2026-09/archive-report` (obs #488) y `engram:sdd/publisher-hardening-2026-09/verify-report` (obs #486). NO bloquean la integración con Alejandro/David/Jonathan pero conviene cerrarlos antes de la entrega.
+Documentados originalmente en `engram:sdd/publisher-hardening-2026-09/{archive-report,verify-report}` (obs #488, #486). NO bloquean la entrega del Día 4 (martes 22-sept) ni la demo. Son mejoras nice-to-have para Fase 5+ si el taller tiene segunda iteración.
 
 ### De la bounded correction (V-NNN del verify)
 - **V-002 WARNING** — multi-failure counter (extender `test_006` con variant de 2 fallas; spec S2 lo pide)
@@ -324,18 +324,8 @@ Documentados en `engram:sdd/publisher-hardening-2026-09/archive-report` (obs #48
 - **R4-007** — HSET + EXPIRE no atómico (subsume R4-002, fixable con Lua EVAL)
 - **R4-008** — SIGTERM no se maneja en Windows (`add_signal_handler` raises `NotImplementedError`)
 
-### Pre-existentes Fase 0 (no introducidos por esta bounded correction)
-- `pyproject.toml [tool.mypy]` declara `discover_untyped_supports` (opción inválida)
-- `common/logging_config.py` imprime la hora con doble Z (`%(asctime)sZ` + `formatTime` retorna `+ "Z"`)
-- `common/config.py:125` falla mypy
-
 ### Subscriber core (`subscriber-core-2026-09` archived, main @ 6414973)
 - **SUB-001 WARNING** — `subscriber/processor.py:_failures` es **in-memory**; spec pedía 3 keys Redis INCR separadas (`health:subscriber:failures`, `health:subscriber:malformed`, `health:subscriber:handler_failures`) para dashboard visibility. **Functional contract preservado** (counter + degrade + continue + ERROR log en threshold=3). DEFERRED — opcional pre-Day-4, baja prioridad.
-- [x] **SUB-002** — Per-zone `_breaches` keys (`(rule_code, zone_id)` tuple with `_GLOBAL_ZONE=""` sentinel for A1); eliminates the 161 spurious `LOW_RENEWABLE` cleared alerts caused by the global counter resetting on non-breach zones. See `subscriber-bugfix-2026-09`.
-- **T-DOC-005** — Corregir typos en `docs/SMOKE_TEST_subscriber.md`: `$env:XM_FORCE_SOURCE` → `$env:FORCE_SOURCE` (línea 21), `docker compose up -d redis` → `make up` o `docker compose -f infra/docker-compose.yml up -d` (línea 10).
-
-### Documentación
-- **T-DOC-001** — Disclaimer "es un modelo, no un dato medido" YA está en `publisher/normalizer.py` docstring; falta elevarlo al `docs/README_TECNICO.md` para que el profesor lo vea
 
 ---
 
@@ -393,23 +383,4 @@ Antes de entregar, validar:
 
 ---
 
-**Owner del roadmap**: Sebastián (+ AI orchestrator para planning/integración) · **Próxima actualización**: cierre de Día 3
-
----
-
-## Próxima sesión — prioridades (Día 3 fin / Día 4 arranque)
-
-**Estado al cierre parcial de Día 3 (main @ `69636cb`)**:
-
-1. ✅ **API PR-A merged** (commit `69636cb`): server shell + lifespan + CORS + 503 handler + state router + health router + 8 tests (state+health, incluye CORS preflight y redis recovery). REQ-API-001/002/005/008 cubiertas. sdd-verify PASS WITH WARNINGS.
-2. ⬜ **API PR-B**: 4 REQs pendientes (REQ-API-003 metrics, REQ-API-004 alerts, REQ-API-006 stress). Routers + tests. Update `api/server.py` para incluirlos en `include_router`. Forecast ~350 LOC.
-3. ⬜ **API PR-C**: REQ-API-007 (SSE stream). Per-connection pubsub + 15s heartbeat + try/finally cleanup. Forecast ~300 LOC.
-4. ⬜ **sdd-archive** final cuando los 3 PRs estén mergeados.
-5. ⬜ **SUB-002** — Investigar y arreglar el bug de `LOW_RENEWABLE cleared` repetido para `zone_id=VAL`. Probable fix en `subscriber/alerts.py:_evaluate_rule` (separar `_cleared_emitted_this_cycle` flag por rule-code, o emitir cleared solo en el evento donde counter pasa de >0 a 0).
-6. ⬜ **SUB-001** (opcional) — Migrar `_failures` in-memory a 3 keys Redis INCR separadas para dashboard visibility. Bajo riesgo, alta visibilidad.
-
-**Contexto completo en Engram** (para retomar la próxima sesión sin perder contexto):
-- `sdd/api-core-2026-09/{explore,proposal,spec,design,tasks,apply-progress,verify-report}` — PR-A cerrado, PR-B/C ready
-- `sdd/subscriber-core-2026-09/{proposal,spec,design,tasks,apply-progress,verify-report,archive-report}` — change cerrado
-- `sdd/publisher-hardening-2026-09/...` — bounded correction Publisher cerrada
-- `architecture/subscriber-isolation` — patrón R4-001 reusable cross-change
+**Owner del roadmap**: Sebastián (+ AI orchestrator para planning/integración) · **Próxima actualización**: demo Day 4 (martes 22-sept-2026)
