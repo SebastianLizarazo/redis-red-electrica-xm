@@ -19,6 +19,32 @@ const NOMBRES = {
   LOW_RENEWABLE: "Renovable bajo",
 };
 
+const num = (valor, decimales = 0) =>
+  Number(valor).toLocaleString("es-CO", {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  });
+
+/**
+ * Redacta la alerta en español a partir de los campos estructurados.
+ *
+ * No se usa `alerta.message` porque el subscriber lo arma en inglés
+ * (`"LOW_RENEWABLE active for zone ATL: 19.49 vs threshold 30.00"`) y
+ * desentonaría con el resto de la interfaz. Los campos `value` y
+ * `threshold` traen lo mismo, así que la traducción es de presentación y
+ * no depende de cambiar el backend.
+ */
+function describir(alerta) {
+  if (alerta.rule === "LOW_RENEWABLE") {
+    return `Generación renovable en ${num(alerta.value, 1)}% · umbral ${num(alerta.threshold, 1)}%`;
+  }
+  if (alerta.rule === "DEMAND_GENERATION_GAP") {
+    return `Déficit de ${num(alerta.value)} MW · umbral ${num(alerta.threshold)} MW`;
+  }
+  // Regla desconocida (A3 en el futuro): mejor el texto crudo que nada.
+  return alerta.message;
+}
+
 const hora = (iso) =>
   new Date(iso).toLocaleTimeString("es-CO", {
     hour: "2-digit",
@@ -46,7 +72,7 @@ function plantilla(alerta) {
         <span class="regla">${escapar(regla)}${resuelta ? " · resuelta" : ""}</span>
         <span class="hora">${hora(alerta.timestamp)}</span>
       </div>
-      <div class="mensaje">${escapar(alerta.message)}</div>
+      <div class="mensaje">${escapar(describir(alerta))}</div>
       <span class="zona">${escapar(zona)}</span>
     </div>`;
 }
