@@ -328,7 +328,7 @@ Documentados en `engram:sdd/publisher-hardening-2026-09/archive-report` (obs #48
 
 ### Subscriber core (`subscriber-core-2026-09` archived, main @ 6414973)
 - **SUB-001 WARNING** — `subscriber/processor.py:_failures` es **in-memory**; spec pedía 3 keys Redis INCR separadas (`health:subscriber:failures`, `health:subscriber:malformed`, `health:subscriber:handler_failures`) para dashboard visibility. **Functional contract preservado** (counter + degrade + continue + ERROR log en threshold=3). DEFERRED — opcional pre-Day-4, baja prioridad.
-- **SUB-002 SUGGESTION** — Patrón de `LOW_RENEWABLE cleared` repetido cada 5s con `zone_id="VAL"` y `value=79.5` (NO es breach, threshold=30). Detectado en smoke E2E. Hipótesis: `cleared` usa `zone_id=event.entity_id` del evento ACTUAL no-breach (no del evento original que tuvo breach) Y/O el counter global sube con 1 zona pero se cleared con las otras 5 dentro del mismo ciclo (race entre eventos de 6 zonas en 1 ciclo). `alerts:total` se infló de 0 → 161 en ~10 min por este patrón. **Investigar en próxima sesión** antes de Day 4 (puede confundir al profe si ve 160+ alerts).
+- [x] **SUB-002** — Per-zone `_breaches` keys (`(rule_code, zone_id)` tuple with `_GLOBAL_ZONE=""` sentinel for A1); eliminates the 161 spurious `LOW_RENEWABLE` cleared alerts caused by the global counter resetting on non-breach zones. See `subscriber-bugfix-2026-09`.
 - **T-DOC-005** — Corregir typos en `docs/SMOKE_TEST_subscriber.md`: `$env:XM_FORCE_SOURCE` → `$env:FORCE_SOURCE` (línea 21), `docker compose up -d redis` → `make up` o `docker compose -f infra/docker-compose.yml up -d` (línea 10).
 
 ### Documentación
