@@ -1,0 +1,91 @@
+# CI: lint + tipos + tests (T-INFRA-012).
+#
+# Replica exactamente lo que hace `make ci` en local, de modo que si pasa
+# en tu máquina pasa acá. Si divergen, el Makefile es la fuente de verdad.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Un push nuevo sobre la misma rama cancela el run anterior: en un taller de
+# 4 días no tiene sentido gastar minutos validando un commit ya superado.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (ruff + mypy + pytest)
+    runs-on: ubuntu-latest
+
+    # Los tests unitarios usan fakeredis, pero los de integración necesitan
+    # un Redis real; sin él se auto-skipean y perderíamos cobertura en CI.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 3.12 es la versión que declaran `[tool.ruff] target-version` y
+      # `[tool.mypy] python_version`. Fijarla evita sorpresas como la
+      # incompatibilidad de pytest-asyncio con Python 3.14.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependencias
+        run: pip install -e ".[dev]"
+
+      # Los tres chequeos corren aunque el anterior falle (`!cancelled()`).
+      # Por defecto Actions se detiene en el primer paso rojo, asi que un
+      # error de mypy ocultaba el resultado de los tests y obligaba a
+      # arreglar de a un problema por corrida.
+      - name: Lint (ruff)
+        if: ${{ !cancelled() }}
+        run: ruff check .
+
+      - name: Type check (mypy)
+        if: ${{ !cancelled() }}
+        run: mypy .
+
+      - name: Tests
+        if: ${{ !cancelled() }}
+        env:
+          REDIS_URL: redis://localhost:6379/0
+        run: pytest --cov --cov-report=term-missing
+
+  frontend:
+    name: Frontend (build del dashboard)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Sin `version:`: la version sale de `packageManager` en
+      # package.json. Declararla tambien aqui es configuracion
+      # contradictoria y la accion aborta.
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      # No hay tests de frontend: el build es la verificación. Un import roto
+      # o un módulo que no resuelve hace fallar el bundling.
+      - name: Build
+        run: pnpm --filter dashboard build

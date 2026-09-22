@@ -32,6 +32,13 @@ ENV/
 # Entornos conda
 *.conda/
 
+# Node — pnpm crea un node_modules en la raíz del workspace, además del de
+# dashboard/ (que ya cubre dashboard/.gitignore).
+node_modules/
+.pnpm-store/
+npm-debug.log*
+pnpm-debug.log*
+
 # IDEs
 .vscode/
 .idea/

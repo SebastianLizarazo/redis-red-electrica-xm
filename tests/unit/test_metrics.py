@@ -7,13 +7,12 @@ Convención Strict TDD (subscriber-core-2026-09):
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 from common.models import DataSource, Event, EventData, Location, ZoneId
 from subscriber.metrics import compute_metrics, persist_metrics  # noqa: F401  (FAIL pre-impl)
-
 
 pytestmark = pytest.mark.unit
 
@@ -40,7 +39,7 @@ def _make_event(
     Defaults: ANT, demanda=1000, generacion=1100, solar=200, eolica=100,
     hidro=600, termica=200 (suma renewable = 900 → M1 ≈ 81.8 %), fuente=SIM.
     """
-    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=timezone.utc)
+    ts = ts or datetime(2026, 9, 20, 12, 0, 0, tzinfo=UTC)
     return Event(
         entity_id=zone_id,
         timestamp=ts,

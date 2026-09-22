@@ -2,12 +2,61 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Monitor Red Eléctrica XM</title>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <header class="header">
+        <div>
+          <h1>Monitor de la Red Eléctrica Colombiana</h1>
+          <p class="subtitle">
+            Sistema Interconectado Nacional · datos de XM en tiempo real
+          </p>
+        </div>
+        <div id="banner" class="banner is-sim">
+          <span class="dot"></span>
+          <span class="texto">Conectando…</span>
+        </div>
+      </header>
+
+      <section id="kpis" class="kpi-grid"></section>
+
+      <section class="grid-2">
+        <div class="card">
+          <h2>Demanda vs generación (tiempo real)</h2>
+          <div class="chart-box"><canvas id="chart-live"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>Histórico de demanda</h2>
+          <div class="chart-box"><canvas id="chart-history"></canvas></div>
+        </div>
+      </section>
+
+      <section class="grid-2">
+        <div class="card">
+          <h2>Zonas del SIN</h2>
+          <div id="mapa"></div>
+        </div>
+        <div class="card">
+          <h2>Alertas recientes</h2>
+          <div id="alertas" class="alertas"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Pruebas de stress</h2>
+        <div id="stress" class="stress-grid"></div>
+        <p id="stress-feedback" class="stress-feedback"></p>
+      </section>
+
+      <footer class="footer">
+        Los valores nacionales provienen de XM. El reparto por zona y el
+        desglose por recurso son un modelo documentado, no una medición.
+      </footer>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

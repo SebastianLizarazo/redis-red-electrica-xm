@@ -14,22 +14,40 @@ COMPOSE_FILE := $(COMPOSE_DIR)/docker-compose.yml
 PYTHON ?= python
 PIP    ?= $(PYTHON) -m pip
 
-.PHONY: help up down restart logs logs-redis redis-cli ps \
+# pnpm no viene instalado por defecto. El repo declara `packageManager` en
+# package.json, asi que lo normal es habilitarlo una vez con `corepack enable`.
+# Quien no quiera hacerlo puede invocar:  make build-dashboard PNPM="npx pnpm@11"
+PNPM ?= pnpm
+
+.PHONY: help up up-redis up-dev down restart logs logs-redis logs-publisher \
+        logs-subscriber logs-api redis-cli ps \
         install install-dev venv test test-cov test-unit test-int \
         lint lint-fix format type-check clean demo ci \
-        build-dashboard build publish-locks
+        build-dashboard dev-dashboard build publish-locks
 
-help: ## Show this help. Defaults to first target.
-	@$(MAKE) -p 2>/dev/null | grep -E '^[a-zA-Z_-]+:.*?## .*$$' | sort | \
+help: ## Muestra esta ayuda (objetivo por defecto)
+	@# Se lee el propio Makefile, no `make -p`: la base de datos que imprime
+	@# `-p` no conserva los comentarios `##`, asi que el grep nunca casaba y
+	@# `make help` salia vacio.
+	@grep -hE '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
 	  awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
-##@ Docker (Redis)
+##@ Docker
 
-up: ## Levanta Redis en background (docker compose up -d)
+up: ## Levanta el stack completo en background (Redis + publisher + subscriber + API)
 	docker compose -f $(COMPOSE_FILE) up -d
 
+up-redis: ## Solo Redis — para correr publisher/subscriber/api a mano (Plan A de DEPLOY.md)
+	docker compose -f $(COMPOSE_FILE) up -d redis
+
+up-dev: ## Stack completo + dashboard en modo dev dentro de Docker (perfil `dev`)
+	docker compose -f $(COMPOSE_FILE) --profile dev up -d
+
+build: ## Construye las imágenes de publisher, subscriber y API
+	docker compose -f $(COMPOSE_FILE) build
+
 down: ## Detiene y borra contenedores (conserva el volumen redis-data)
-	docker compose -f $(COMPOSE_FILE) down
+	docker compose -f $(COMPOSE_FILE) --profile dev down
 
 restart: down up ## Reinicia el stack completo
 
@@ -41,6 +59,15 @@ logs: ## Sigue los logs de todos los servicios (Ctrl-C para salir)
 
 logs-redis: ## Solo logs de Redis
 	docker compose -f $(COMPOSE_FILE) logs -f --tail=100 redis
+
+logs-publisher: ## Solo logs del publisher
+	docker compose -f $(COMPOSE_FILE) logs -f --tail=100 publisher
+
+logs-subscriber: ## Solo logs del subscriber
+	docker compose -f $(COMPOSE_FILE) logs -f --tail=100 subscriber
+
+logs-api: ## Solo logs de la API
+	docker compose -f $(COMPOSE_FILE) logs -f --tail=100 api
 
 redis-cli: ## Shell interactivo de redis-cli contra el contenedor Redis
 	docker compose -f $(COMPOSE_FILE) exec redis redis-cli
@@ -90,7 +117,12 @@ ci: lint type-check test ## Pipeline de CI local: lint + types + tests
 ##@ Frontend (dashboard)
 
 build-dashboard: ## Construye el bundle de producción del dashboard
-	cd dashboard && pnpm install --frozen-lockfile && pnpm build
+	$(PNPM) install --frozen-lockfile
+	$(PNPM) --filter dashboard build
+
+dev-dashboard: ## Arranca el dashboard con hot-reload (requiere el backend arriba)
+	$(PNPM) install
+	$(PNPM) --filter dashboard dev
 
 publish-locks: ## Mensaje informativo sobre versionar lockfiles
 	@echo "INFO: 'pnpm-lock.yaml' se commitea al repo para builds reproducibles."
@@ -101,14 +133,18 @@ demo: ## Imprime instrucciones para correr el demo en vivo
 	@echo ""
 	@echo "=== Demo del Monitor de Red Eléctrica Colombiana ==="
 	@echo ""
-	@echo "1) Levantar Redis:"
+	@echo "1) Levantar el stack completo (Redis + publisher + subscriber + API):"
 	@echo "   make up"
+	@echo "   Comprobar:  curl localhost:8000/api/health"
 	@echo ""
-	@echo "2) (Próximamente) Arrancar publisher + subscriber + api:"
-	@echo "   docker compose -f infra/docker-compose.yml up"
+	@echo "2) Ver que los eventos fluyen:"
+	@echo "   make logs-publisher"
 	@echo ""
-	@echo "3) Arrancar el dashboard en modo dev:"
-	@echo "   cd dashboard && pnpm dev"
+	@echo "   Si el 6379 ya esta ocupado:  REDIS_PORT=6380 make up"
+	@echo ""
+	@echo "3) Arrancar el dashboard:"
+	@echo "   make dev-dashboard          (requiere Node + corepack enable)"
+	@echo "   make up-dev                 (todo en Docker, sin instalar Node)"
 	@echo "   Abre http://localhost:5173"
 	@echo ""
 	@echo "4) Inspeccionar Redis en vivo:"

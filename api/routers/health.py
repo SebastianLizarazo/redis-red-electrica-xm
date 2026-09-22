@@ -46,11 +46,20 @@ _HEALTH_KEYS: tuple[str, ...] = (
 )
 
 
-def _parse_iso_aware(raw: str | None) -> datetime | None:
+def _parse_iso_aware(raw: str | bytes | None) -> datetime | None:
     """Parsea un ISO 8601 con tzinfo. None/absent → None. Parse fail → None
-    (defensivo: un timestamp corrupto en Redis no debe tumbar `/api/health`)."""
+    (defensivo: un timestamp corrupto en Redis no debe tumbar `/api/health`).
+
+    Acepta `bytes` porque redis-py tipa sus lecturas como `bytes | str`: la
+    misma firma sirve con y sin `decode_responses`. En runtime siempre llega
+    `str` (el cliente se crea con `decode_responses=True`), pero el tipo
+    declarado depende de la version de redis instalada y desde redis 8.x
+    mypy lo reporta.
+    """
     if not raw:
         return None
+    if isinstance(raw, bytes):
+        raw = raw.decode()
     try:
         parsed = datetime.fromisoformat(raw)
     except ValueError:

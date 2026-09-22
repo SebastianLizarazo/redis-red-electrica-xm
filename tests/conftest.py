@@ -14,9 +14,8 @@ Convención:
 
 from __future__ import annotations
 
-import asyncio
-from datetime import datetime, timezone
-from typing import AsyncIterator, Iterator
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 
 import pytest
 import pytest_asyncio
@@ -30,7 +29,6 @@ from common.models import (
     Location,
     ZoneId,
 )
-
 
 # ----------------------------------------------------------------------
 # Redis (fake + real)
@@ -156,7 +154,7 @@ def event_sample() -> Event:
     """Evento tick realista para usar en tests de processor / API."""
     return Event(
         entity_id="SIN",
-        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC),
         location=Location(latitude=4.5, longitude=-74.1),
         data=EventData(
             demanda_mw=10_500.0,
@@ -175,7 +173,7 @@ def zone_event_sample() -> Event:
     """Evento de zona individual (Antioquia) con valores plausibles."""
     return Event(
         entity_id="ANT",
-        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC),
         location=Location(latitude=6.25, longitude=-75.56),
         data=EventData(
             demanda_mw=2_100.0,
@@ -199,7 +197,7 @@ def alert_sample() -> Alert:
         zone_id="ANT",
         value=950.0,
         threshold=800.0,
-        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=timezone.utc),
+        timestamp=datetime(2026, 9, 19, 12, 0, 0, tzinfo=UTC),
         message="Déficit demanda-generación 950 MW supera umbral 800 MW",
     )
 
@@ -212,7 +210,7 @@ def alert_sample() -> Alert:
 @pytest.fixture
 def utc_now() -> datetime:
     """`datetime.now(timezone.utc)` con tipo explícito (ayuda al linter)."""
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 @pytest.fixture

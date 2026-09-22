@@ -133,4 +133,26 @@ def create_app() -> FastAPI:
 app = create_app()
 
 
-__all__ = ["app", "create_app", "lifespan"]
+def main() -> None:
+    """Arranca uvicorn con la config del `.env`.
+
+    Existe para que `python -m api.server` funcione: es el paso 4 del Plan A
+    en `docs/DEPLOY.md` y el CMD de `infra/Dockerfile.api`. Sin este bloque
+    el módulo se importaba, no levantaba nada y salía con código 0 — un
+    fallo silencioso justo en la ruta que sigue quien monta la demo.
+    """
+    import uvicorn
+
+    uvicorn.run(
+        app,
+        host=settings.api_host,
+        port=settings.api_port,
+        log_level=settings.log_level.lower(),
+    )
+
+
+if __name__ == "__main__":
+    main()
+
+
+__all__ = ["app", "create_app", "lifespan", "main"]

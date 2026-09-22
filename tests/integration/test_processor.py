@@ -300,6 +300,6 @@ async def test_004_processor_shutdown_stops_cleanly(
     # absorb event-loop scheduling jitter.
     try:
         await asyncio.wait_for(consume_task, timeout=3.0)
-    except asyncio.TimeoutError:
+    except TimeoutError:
         consume_task.cancel()
         pytest.fail("processor.run() did not exit within 3s after _stop.set()")

@@ -46,7 +46,6 @@ from common.redis_keys import (
 )
 from publisher.main import Publisher, _aplanar, _safe_redis_url
 
-
 # ----------------------------------------------------------------------
 # Helpers locales (no se exportan)
 # ----------------------------------------------------------------------

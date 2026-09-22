@@ -14,9 +14,8 @@ from __future__ import annotations
 import json
 import logging
 import sys
-from datetime import datetime, timezone
-from typing import Any, Mapping
-
+from datetime import UTC, datetime
+from typing import Any
 
 # Colores ANSI (solo texto plano; los logs JSON NO los emiten).
 _RESET = "\x1b[0m"
@@ -42,7 +41,7 @@ class _JsonFormatter(logging.Formatter):
 
     def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]
         payload: dict[str, Any] = {
-            "timestamp": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(record.created, tz=UTC).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),
@@ -72,7 +71,7 @@ class _HumanFormatter(logging.Formatter):
         datefmt: str | None = None,
     ) -> str:
         # Forzar UTC + sufijo Z.
-        ts = datetime.fromtimestamp(record.created, tz=timezone.utc)
+        ts = datetime.fromtimestamp(record.created, tz=UTC)
         return ts.strftime(datefmt or "%Y-%m-%dT%H:%M:%S") + "Z"
 
     def format(self, record: logging.LogRecord) -> str:  # type: ignore[override]

@@ -19,7 +19,6 @@ from __future__ import annotations
 
 from common.models import AlertSeverity, ZoneId
 
-
 # --- Pub/Sub ----------------------------------------------------------------
 
 # Canal único con discriminador `type` en el payload
