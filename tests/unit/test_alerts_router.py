@@ -129,3 +129,78 @@ async def test_002_alerts_empty_recent_and_active_returns_empty_containers(
     assert isinstance(body["active"], dict)
     assert len(body["recent"]) == 0
     assert len(body["active"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# test_003/004 — REGRESIÓN: la alerta global A1 llega al cliente
+# ---------------------------------------------------------------------------
+#
+# A1 (DEMAND_GENERATION_GAP) evalúa el SIN completo, no una zona, y el
+# subscriber marca ese alcance con el centinela `_GLOBAL_ZONE = ""`.
+#
+# `Alert.zone_id` estaba tipado como `ZoneId`, que no admite cadena vacía. El
+# subscriber esquivaba la validación al escribir (`model_construct`), pero
+# `api/routers/alerts.py` valida al leer con `model_validate_json`: todas las
+# A1 se descartaban en silencio y nunca llegaban al dashboard. Medido contra
+# el stack real: 13 alertas en Redis, 1 expuesta por `/api/alerts`.
+#
+# Si alguien vuelve a estrechar el tipo, estos dos tests fallan.
+
+
+def _make_global_a1_alert(state: str = "active") -> Alert:
+    """Alerta A1 con el centinela de zona global.
+
+    Se construye con el constructor normal (no `model_construct`) a
+    propósito: si el modelo dejara de aceptar `""`, el test falla aquí
+    mismo, antes de llegar al router.
+    """
+    return Alert(
+        id=f"alert-global-a1-{state}",
+        rule="DEMAND_GENERATION_GAP",
+        code="DEMAND_GENERATION_GAP",
+        severity=AlertSeverity.HIGH,
+        zone_id="",
+        value=1472.0,
+        threshold=800.0,
+        state=state,  # type: ignore[arg-type]
+        consecutive_cycles=2,
+        timestamp=datetime(2026, 9, 21, 12, 0, 0, tzinfo=UTC),
+        message="DEMAND_GENERATION_GAP active for zone : 1472.00 vs threshold 800.00",
+    )
+
+
+async def test_003_global_a1_alert_reaches_the_client(app_client, fakeredis_async_client):
+    """Una A1 con `zone_id=""` publicada por el subscriber llega al GET."""
+    from subscriber.alerts import publish_alert
+
+    await publish_alert(fakeredis_async_client, _make_global_a1_alert())
+
+    resp = await app_client.get("/api/alerts")
+    assert resp.status_code == 200
+    body = resp.json()
+
+    # Lo que fallaba: `recent` venía vacío porque el Alert no validaba.
+    assert len(body["recent"]) == 1, "la alerta global se descartó al leerla"
+    alerta = body["recent"][0]
+    assert alerta["rule"] == "DEMAND_GENERATION_GAP"
+    assert alerta["zone_id"] == "", "el centinela de zona global debe sobrevivir el round-trip"
+    assert alerta["value"] == 1472.0
+    assert body["active"] == {"DEMAND_GENERATION_GAP": 1}
+
+
+async def test_004_global_and_per_zone_alerts_coexist(app_client, fakeredis_async_client):
+    """Conviven una alerta global y una por zona.
+
+    Este es el caso que enmascaraba el bug: la A2 por zona sí aparecía, así
+    que `/api/alerts` devolvía datos y parecía funcionar. Solo faltaba la
+    global, y el panel del dashboard mostraba de menos sin ningún error.
+    """
+    from subscriber.alerts import publish_alert
+
+    await publish_alert(fakeredis_async_client, _make_global_a1_alert())
+    await publish_alert(fakeredis_async_client, _make_active_alert("LOW_RENEWABLE", zone="ATL"))
+
+    body = (await app_client.get("/api/alerts")).json()
+
+    zonas = sorted(a["zone_id"] for a in body["recent"])
+    assert zonas == ["", "ATL"], f"se perdió alguna alerta: {zonas}"

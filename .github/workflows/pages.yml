@@ -48,9 +48,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Sin `version:`: la version sale de `packageManager` en
+      # package.json. Declararla tambien aqui es configuracion
+      # contradictoria y la accion aborta.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:

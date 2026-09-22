@@ -48,13 +48,20 @@ jobs:
       - name: Instalar dependencias
         run: pip install -e ".[dev]"
 
+      # Los tres chequeos corren aunque el anterior falle (`!cancelled()`).
+      # Por defecto Actions se detiene en el primer paso rojo, asi que un
+      # error de mypy ocultaba el resultado de los tests y obligaba a
+      # arreglar de a un problema por corrida.
       - name: Lint (ruff)
+        if: ${{ !cancelled() }}
         run: ruff check .
 
       - name: Type check (mypy)
+        if: ${{ !cancelled() }}
         run: mypy .
 
       - name: Tests
+        if: ${{ !cancelled() }}
         env:
           REDIS_URL: redis://localhost:6379/0
         run: pytest --cov --cov-report=term-missing
@@ -65,9 +72,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Sin `version:`: la version sale de `packageManager` en
+      # package.json. Declararla tambien aqui es configuracion
+      # contradictoria y la accion aborta.
       - uses: pnpm/action-setup@v4
-        with:
-          version: 11
 
       - uses: actions/setup-node@v4
         with:

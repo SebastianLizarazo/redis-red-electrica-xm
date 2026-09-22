@@ -146,11 +146,3 @@ exclude = [
     "build/",
     "dist/",
 ]
-
-[[tool.mypy.overrides]]
-module = "fakeredis.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "pydataxm.*"
-ignore_missing_imports = true
