@@ -1,9 +1,9 @@
 # DEPLOY — Guía de despliegue y demo
 
-> Documento vivo. Cubre los tres planes que el equipo valida antes del
-> **demo del martes 22-sept-2026**: local (`Plan A`), remoto vía
-> `cloudflared` (`Plan B`) y video de respaldo (`Plan C`). Cada plan es
-> independiente: si uno falla, el siguiente es fallback.
+> Documento vivo. Cubre los dos planes que el equipo valida antes del
+> **demo del martes 22-sept-2026**: local (`Plan A`) y remoto vía
+> `cloudflared` (`Plan B`). Cada plan es independiente: si uno falla,
+> el otro es fallback.
 
 ## 1. Plan A — Demo local
 
@@ -186,36 +186,7 @@ dominio del tunnel o del hosting del frontend es distinto, agregarlo
 vía variable de entorno `CORS_ORIGINS=https://red.tudominio.com` en el
 `.env` antes de levantar la API.
 
-## 3. Plan C — Video de respaldo
-
-Si Plan A y Plan B fallan (sin dominio Cloudflare, máquina del equipo
-muerta, etc.), un screencast de 5 minutos es suficiente para mostrar el
-sistema funcionando.
-
-### Herramientas
-
-- OBS Studio (desktop), Loom (browser), o `ffmpeg` con `x11grab` /
-  `gdigrab` para captura silenciosa.
-
-### Secuencia a grabar (~5 min)
-
-1. Levantar stack completo (Plan A pasos 1–5).
-2. Mostrar publisher corriendo (logs visibles, eventos publicando).
-3. Forzar `demand_surge` desde el dashboard → alerta aparece en panel
-   lateral.
-4. Forzar 3 timeouts XM con `XM_TIMEOUT_SECONDS=0.001` en el `.env` →
-   banner del dashboard cambia a **SIMULADOR** (caída + fallback).
-5. Mostrar SSE actualizando KPIs en vivo sin recargar la página
-   (`curl -N http://localhost:8000/api/stream` en otra terminal).
-
-### Distribución
-
-- Subir a YouTube como **unlisted** (no aparece en búsquedas pero el
-  enlace funciona).
-- Alternativa: Google Drive compartido solo con el profesor, permiso
-  de lectura.
-
-## 4. Troubleshooting común
+## 3. Troubleshooting común
 
 - **Puerto 6379 ocupado** (`address already in use` al hacer `make up`): ya
   tienes un Redis corriendo. No hace falta apagarlo, basta con publicar el
