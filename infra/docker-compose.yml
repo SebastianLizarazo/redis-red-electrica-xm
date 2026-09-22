@@ -119,15 +119,28 @@ services:
     image: node:22-alpine
     container_name: dashboard-red-electrica
     working_dir: /app
-    command: sh -c "corepack enable && pnpm install && pnpm dev --host 0.0.0.0"
+    # El install corre en la RAIZ del workspace, no dentro de dashboard/:
+    # es donde pnpm lee `allowBuilds` de `pnpm-workspace.yaml`. Ejecutarlo
+    # desde el paquete hijo ignora ese permiso y aborta por esbuild.
+    command: sh -c "corepack enable && pnpm install && pnpm --filter dashboard dev --host 0.0.0.0"
     ports:
       - "5173:5173"
     environment:
       # Dentro de Docker el backend no es localhost, es el servicio `api`.
       VITE_PROXY_TARGET: http://api:8000
     volumes:
-      - ../dashboard:/app
+      # Monta el dashboard MAS los archivos del workspace pnpm de la raiz.
+      # Sin `pnpm-workspace.yaml` el contenedor no ve `allowBuilds.esbuild`
+      # y `pnpm install` aborta con ERR_PNPM_IGNORED_BUILDS, dejando el
+      # servicio en bucle de reinicio.
+      - ../dashboard:/app/dashboard
+      - ../pnpm-workspace.yaml:/app/pnpm-workspace.yaml:ro
+      - ../pnpm-lock.yaml:/app/pnpm-lock.yaml:ro
+      - ../package.json:/app/package.json:ro
+      # Volúmenes anónimos: el node_modules del host puede traer binarios
+      # compilados para otra plataforma y pisaría los del contenedor.
       - /app/node_modules
+      - /app/dashboard/node_modules
     depends_on:
       - api
     restart: unless-stopped
