@@ -14,9 +14,15 @@ del equipo con todo instalado.
 
 - Python 3.11 o superior.
 - Node.js 18 o superior **solo si quieres hot-reload en el dashboard**. En ese
-  caso habilita pnpm una vez con `corepack enable` (viene con Node, no hay que
-  instalar nada más). Si prefieres no tocar Node, `make up-dev` levanta el
-  dashboard dentro de Docker.
+  caso necesitas pnpm: pruébalo con `corepack enable` (corepack viene con
+  Node 16.9+, aunque algunas distribuciones lo empaquetan aparte y el comando
+  puede no existir). Si no lo tienes, o si prefieres no instalar Node,
+  **`make up-dev` levanta el dashboard dentro de Docker** y no hace falta
+  nada de esto.
+
+> Todos los comandos `make` se ejecutan **desde la raíz del repositorio**, no
+> desde `dashboard/`. Si ves `make: *** No rule to make target`, estás en la
+> carpeta equivocada: `cd` a la raíz y repite.
 - Docker + docker compose (solo para levantar Redis).
 
 ### Opción 1 — todo en Docker (recomendada para la demo)
@@ -216,10 +222,13 @@ sistema funcionando.
   del contenedor en otro puerto del host: `REDIS_PORT=6380 make up`. Los
   servicios se siguen hablando por el 6379 dentro de la red de Docker, así
   que no cambia nada más. Lo mismo aplica a `API_PORT` y `DASHBOARD_PORT`.
-- **`pnpm: command not found`**: el repo declara la versión de pnpm en
-  `package.json`, solo hay que habilitarlo una vez con `corepack enable`.
-  Alternativas: `make dev-dashboard PNPM="npx pnpm@11"`, o directamente
-  `make up-dev` para correr el dashboard en Docker y olvidarse de Node.
+- **`make: *** No rule to make target 'up'`**: estás dentro de una subcarpeta
+  (normalmente `dashboard/`). Los `make` van desde la raíz del repo.
+- **`pnpm: command not found` o `corepack: command not found`**: no necesitas
+  ninguno de los dos. Usa `make up-dev`, que corre el dashboard en Docker.
+  Si aun así quieres hot-reload en tu máquina, tienes dos salidas:
+  `corepack enable` (si tu instalación de Node lo incluye) o
+  `make dev-dashboard PNPM="npx pnpm@11"`, que descarga pnpm al vuelo.
 - **Publisher no conecta**: ¿corriste `make up`? Verificar con
   `redis-cli ping` (debe responder `PONG`) y revisar `REDIS_URL` en
   `.env`.
