@@ -13,7 +13,10 @@ del equipo con todo instalado.
 ### Prerrequisitos
 
 - Python 3.11 o superior.
-- Node.js 18 o superior y pnpm 11+ (para el dashboard).
+- Node.js 18 o superior **solo si quieres hot-reload en el dashboard**. En ese
+  caso habilita pnpm una vez con `corepack enable` (viene con Node, no hay que
+  instalar nada más). Si prefieres no tocar Node, `make up-dev` levanta el
+  dashboard dentro de Docker.
 - Docker + docker compose (solo para levantar Redis).
 
 ### Opción 1 — todo en Docker (recomendada para la demo)
@@ -21,8 +24,26 @@ del equipo con todo instalado.
 Dos comandos y dos terminales:
 
 ```bash
-make up                      # Redis + publisher + subscriber + API
-cd dashboard && pnpm dev     # dashboard con hot-reload
+FORCE_SOURCE=simulator PUBLISHER_INTERVAL_SECONDS=3 make up
+make dev-dashboard           # dashboard con hot-reload
+```
+
+> **Por qué las variables.** Sin ellas el publisher arranca contra XM real,
+> que publica cada **5 minutos**: el dashboard parece congelado y da la
+> impresión de estar roto. Con el simulador los datos se mueven cada 3 s.
+> Para la demo con datos reales, simplemente `make up`.
+
+Si no quieres instalar Node, un solo comando levanta también el dashboard:
+
+```bash
+FORCE_SOURCE=simulator PUBLISHER_INTERVAL_SECONDS=3 make up-dev
+```
+
+**Si el puerto 6379 ya está ocupado** (tienes un Redis instalado en tu
+máquina), no hace falta apagarlo:
+
+```bash
+REDIS_PORT=6380 make up
 ```
 
 Comprobar que el backend quedó arriba antes de abrir el navegador:
@@ -190,9 +211,15 @@ sistema funcionando.
 
 ## 4. Troubleshooting común
 
-- **Puerto 6379 ocupado**: en Linux/macOS `lsof -i :6379`; en Windows
-  `netstat -ano | findstr :6379`. Matar el proceso o cambiar
-  `REDIS_PORT` en `.env` y re-levantar.
+- **Puerto 6379 ocupado** (`address already in use` al hacer `make up`): ya
+  tienes un Redis corriendo. No hace falta apagarlo, basta con publicar el
+  del contenedor en otro puerto del host: `REDIS_PORT=6380 make up`. Los
+  servicios se siguen hablando por el 6379 dentro de la red de Docker, así
+  que no cambia nada más. Lo mismo aplica a `API_PORT` y `DASHBOARD_PORT`.
+- **`pnpm: command not found`**: el repo declara la versión de pnpm en
+  `package.json`, solo hay que habilitarlo una vez con `corepack enable`.
+  Alternativas: `make dev-dashboard PNPM="npx pnpm@11"`, o directamente
+  `make up-dev` para correr el dashboard en Docker y olvidarse de Node.
 - **Publisher no conecta**: ¿corriste `make up`? Verificar con
   `redis-cli ping` (debe responder `PONG`) y revisar `REDIS_URL` en
   `.env`.
