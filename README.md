@@ -686,6 +686,16 @@ Si el puerto 6379 ya está ocupado en tu máquina:
 REDIS_PORT=6380 make up
 ```
 
+Lo mismo con `API_PORT=8001` (puerto 8000) y `DASHBOARD_PORT=5174` (5173).
+
+> **Si un `make up` falló a medias, corré `make down` antes de reintentar.**
+> Cuando Docker no logra mapear un puerto, deja el contenedor creado pero
+> **sin conectar a la red**; un `make up` posterior solo lo arranca, sin
+> volver a conectarlo. El stack queda medio roto y el síntoma engaña: la API
+> responde `503` con «redis no disponible» aunque Redis esté `healthy`. El
+> problema no es Redis, es que ese contenedor quedó aislado. `make down`
+> elimina los contenedores y el siguiente `up` los crea bien.
+
 El dashboard tiene dos opciones:
 
 ```bash
