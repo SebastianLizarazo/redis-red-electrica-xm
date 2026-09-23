@@ -611,6 +611,10 @@ cd redis-red-electrica-xm
 # Levantar Redis solo
 make up-redis
 
+# ¿Falla con "address already in use"? Ya tenés un Redis en el 6379.
+# No hace falta apagarlo, publicá el del contenedor en otro puerto:
+REDIS_PORT=6380 make up-redis
+
 # (Opcional) entorno virtual Python para procesos a mano
 python -m venv .venv
 # Windows
@@ -622,6 +626,12 @@ pip install -e ".[dev]"
 
 > Todos los comandos `make` se ejecutan desde la raíz del repo. Si ves
 > `make: *** No rule to make target`, estás dentro de una subcarpeta.
+
+> **Si usás `REDIS_PORT`, pasalo en todos los `make` de la sesión** (`up`,
+> `up-redis`, `up-dev`). Y si corrés los procesos Python a mano, apuntalos
+> al mismo puerto con `REDIS_URL=redis://localhost:6380/0`. Dentro de Docker
+> los servicios se siguen hablando por el 6379, así que no hay que tocar
+> nada más.
 
 ### Variables de entorno relevantes
 
@@ -641,6 +651,18 @@ Variables leídas desde `.env` o del entorno del proceso (definidas en
 | `ALERT_DEBOUNCE_CYCLES` | 2 | Ciclos antes de publicar `active` |
 | `CORS_ORIGINS` | localhost:5173 + GH Pages | Origins CORS permitidos |
 | `API_PORT` | 8000 | Puerto de la API |
+
+Aparte existen dos variables que **no** lee `common/config.py`: las
+interpreta `docker compose` al mapear puertos del host. Sirven para cuando
+algo ya ocupa el puerto por defecto:
+
+| Variable | Default | Efecto |
+|----------|---------|--------|
+| `REDIS_PORT` | 6379 | Puerto del host donde se publica el Redis del contenedor |
+| `DASHBOARD_PORT` | 5173 | Puerto del host para el dashboard con `make up-dev` |
+
+Solo cambian el mapeo hacia afuera: dentro de la red de Docker los servicios
+se siguen comunicando por los puertos internos de siempre.
 
 ## 14. Ejecución del stack completo
 
